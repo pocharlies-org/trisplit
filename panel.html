@@ -188,6 +188,10 @@ let S = null;
 let W = null;
 
 let arrDrag = null;
+// While a chip is being dragged, engine pushes are parked in pendingState:
+// re-rendering would destroy the dragged node and WebKit cancels the drag.
+let chipDragging = false;
+let pendingState = null;
 let delArmed = false;
 
 // Tray/slot identity: bare "App" is the same window as "App#1".
@@ -412,12 +416,14 @@ function render() {
         chip.ondragstart = (e) => {
           e.dataTransfer.setData("text/plain", JSON.stringify({ app, screen: s.name, idx: j + 1 }));
           e.dataTransfer.effectAllowed = "move";
-          chip.classList.add("dragging");
-          document.body.classList.add("is-dragging");
+          chipDragging = true;
+          // Deferred: pointer-events:none on .chip during dragstart aborts the drag in WebKit.
+          setTimeout(() => { chip.classList.add("dragging"); document.body.classList.add("is-dragging"); }, 0);
         };
         chip.ondragend = () => {
           chip.classList.remove("dragging");
           document.body.classList.remove("is-dragging");
+          endChipDrag();
         };
         slot.appendChild(chip);
       }
@@ -427,14 +433,18 @@ function render() {
         e.preventDefault();
         slot.classList.remove("over");
         document.body.classList.remove("is-dragging");
-        let p; try { p = JSON.parse(e.dataTransfer.getData("text/plain")); } catch { return; }
+        // Fold in any state parked during the drag first, then apply the user's move on top.
+        chipDragging = false;
+        if (pendingState) { const ps = pendingState; pendingState = null; S = ps; W = null; }
+        let p; try { p = JSON.parse(e.dataTransfer.getData("text/plain")); } catch { render(); return; }
         const tgt = groups().get(s.name);
+        if (!tgt) { render(); return; }
         if (p.tray) {
           tgt.slots[j] = p.app;
           post({ action: "liveMove", screen: s.name, idx: j + 1, app: p.app });
         } else {
           const src = groups().get(p.screen);
-          if (!src || !(p.idx >= 1 && p.idx <= src.slots.length)) return;
+          if (!src || !(p.idx >= 1 && p.idx <= src.slots.length)) { render(); return; }
           const tmp = tgt.slots[j];
           tgt.slots[j] = src.slots[p.idx - 1];
           src.slots[p.idx - 1] = tmp;
@@ -616,12 +626,13 @@ function renderChips() {
       c.ondragstart = (e) => {
         e.dataTransfer.setData("text/plain", JSON.stringify({ app: spec, tray: true }));
         e.dataTransfer.effectAllowed = "copy";
-        c.classList.add("dragging");
-        document.body.classList.add("is-dragging");
+        chipDragging = true;
+        setTimeout(() => { c.classList.add("dragging"); document.body.classList.add("is-dragging"); }, 0);
       };
       c.ondragend = () => {
         c.classList.remove("dragging");
         document.body.classList.remove("is-dragging");
+        endChipDrag();
       };
       c.ondblclick = () => placeInFirstFree(spec);
       c.onkeydown = (e) => {
@@ -711,6 +722,14 @@ document.addEventListener("keydown", (e) => {
   post({ action: "close" });
 });
 
+// Drag ended without a drop (or after one): apply the parked push, if any.
+function endChipDrag() {
+  chipDragging = false;
+  if (!pendingState) return;
+  const ps = pendingState; pendingState = null;
+  S = ps; W = null; render();
+}
+
 window.trisplitSetState = (s) => {
   if (!s || typeof s !== "object") return;
   if (!s.arrange || Array.isArray(s.arrange)) s.arrange = {};
@@ -720,6 +739,7 @@ window.trisplitSetState = (s) => {
   if (!Number.isInteger(s.active) || s.active < 1 || s.active > s.configs.length) s.active = 1;
   if (!Array.isArray(s.apps)) s.apps = [];
   if (!Array.isArray(s.screens)) s.screens = [];
+  if (chipDragging) { pendingState = s; return; }
   if (arrDrag) arrDrag(true);
   S = s; W = null; render();
 };

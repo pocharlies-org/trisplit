@@ -328,5 +328,47 @@
     assert(chipAt("LC49G95T", 1).classList.contains("absent"), "Code#2 absent when Code closed");
   });
 
+  function fakeDT() {
+    const d = {};
+    return { effectAllowed: "", setData: (k, v) => { d[k] = v; }, getData: (k) => d[k] || "" };
+  }
+
+  test("state push during chip drag is deferred; dragend applies it", () => {
+    fresh();
+    const chip = slotOf(ODY, 1).querySelector(".chip");
+    chip.ondragstart({ dataTransfer: fakeDT() });
+    assert(!document.body.classList.contains("is-dragging"), "is-dragging deferred past dragstart");
+    const s2 = JSON.parse(JSON.stringify(FIXTURE));
+    s2.configs[0].monitors[ODY].slots = ["Safari", "Slack"];
+    window.trisplitSetState(s2);
+    assert(slotOf(ODY, 1).querySelector(".chip") === chip, "dragged chip node survives the push");
+    assert(chip.isConnected, "dragged chip still in DOM");
+    assert(!slotOf(ODY, 2).querySelector(".chip"), "pending state not rendered yet");
+    chip.ondragend();
+    const c2 = slotOf(ODY, 2).querySelector(".chip");
+    assert(c2 && c2.textContent.includes("Slack"), "pending state applied on dragend");
+    assert(slotOf(ODY, 1).querySelector(".chip") !== chip, "re-rendered after dragend");
+  });
+
+  test("drop during chip drag keeps the swap on top of the pending push", () => {
+    fresh();
+    const chip = slotOf("LC49G95T", 1).querySelector(".chip");
+    const dt = fakeDT();
+    chip.ondragstart({ dataTransfer: dt });
+    const s2 = JSON.parse(JSON.stringify(FIXTURE));
+    s2.apps.push({ name: "Mail", count: 1, titles: [""] });
+    s2.configs[0].monitors["Built-in Retina Display"].slots = ["Mail"];
+    window.trisplitSetState(s2);
+    slotOf(ODY, 1).ondrop({ preventDefault() {}, dataTransfer: dt });
+    chip.ondragend();
+    const saves = byAction("save");
+    eq(saves.length, 1, "save count");
+    const mons = saves[0].configs[0].monitors;
+    eq(mons[ODY].slots[0], "Code#2", "swap target");
+    eq(mons["LC49G95T"].slots[0], "Safari", "swap source");
+    eq(mons["Built-in Retina Display"].slots[0], "Mail", "pending state folded in");
+    assert(slotOf("Built-in Retina Display", 1).querySelector(".chip").textContent.includes("Mail"), "rendered");
+  });
+
   report("panel: " + pass + " passed, " + fail + " failed");
 })();

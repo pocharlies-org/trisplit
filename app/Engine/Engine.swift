@@ -24,6 +24,9 @@ final class Engine: @unchecked Sendable {
 
     let axQueue = DispatchQueue(label: "trisplit.ax", qos: .userInitiated)
     private var pushItem: DispatchWorkItem?
+    /// Last script sent to the panel (main thread). AX destroy notifications fire constantly;
+    /// identical pushes are skipped so the panel is not re-rendered for nothing.
+    private var lastPushed: String?
     private var observers: [pid_t: AXObserver] = [:]
     private var watching = false
 
@@ -273,7 +276,12 @@ final class Engine: @unchecked Sendable {
     private func pushNow() {
         panelState { [weak self] p in
             guard let self else { return }
-            do { self.onPush?(try panelPushScript(p)) } catch { self.log("push falló: \(error)") }
+            do {
+                let js = try panelPushScript(p)
+                guard js != self.lastPushed else { return }
+                self.lastPushed = js
+                self.onPush?(js)
+            } catch { self.log("push falló: \(error)") }
         }
     }
 
@@ -283,6 +291,9 @@ final class Engine: @unchecked Sendable {
             log("acción de panel desconocida: \(body)")
             return
         }
+        // Any panel message means its local state may differ from the last push
+        // (reload, edits, rejected save): the next push must always go through.
+        lastPushed = nil
         switch action {
         case "ready":
             schedulePush(after: 0.3)
