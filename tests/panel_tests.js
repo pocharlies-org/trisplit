@@ -370,5 +370,42 @@
     assert(slotOf("Built-in Retina Display", 1).querySelector(".chip").textContent.includes("Mail"), "rendered");
   });
 
+  const CHROME2 = [{ name: "Google Chrome", count: 2, titles: ["a", "b"] }];
+  const chromeChips = () => tchips().filter((c) => c.textContent.startsWith("Google Chrome · ventana"));
+
+  test("stray drag: document dragend without chip dragend unparks later pushes", () => {
+    fresh();
+    tchips()[0].ondragstart({ dataTransfer: fakeDT() });
+    document.dispatchEvent(new Event("dragend", { bubbles: true }));
+    fresh((s) => { s.apps = CHROME2; });
+    eq(chromeChips().length, 2, "chrome tray chips");
+    assert(!document.body.classList.contains("is-dragging"), "is-dragging cleared");
+  });
+
+  test("stray drag: pointerdown on document unparks later pushes", () => {
+    fresh();
+    tchips()[0].ondragstart({ dataTransfer: fakeDT() });
+    ptr(document.body, "pointerdown", 1, 1);
+    fresh((s) => { s.apps = CHROME2; });
+    eq(chromeChips().length, 2, "chrome tray chips");
+  });
+
+  test("stale drag watchdog: push >15 s after dragstart is applied", () => {
+    fresh();
+    const realNow = Date.now;
+    try {
+      const t0 = realNow();
+      Date.now = () => t0;
+      tchips()[0].ondragstart({ dataTransfer: fakeDT() });
+      Date.now = () => t0 + 1000;
+      fresh((s) => { s.apps = CHROME2; });
+      eq(chromeChips().length, 0, "push parked during live drag");
+      Date.now = () => t0 + 16000;
+      fresh((s) => { s.apps = CHROME2; });
+      eq(chromeChips().length, 2, "stale drag: push applied");
+    } finally { Date.now = realNow; }
+    fresh();
+  });
+
   report("panel: " + pass + " passed, " + fail + " failed");
 })();

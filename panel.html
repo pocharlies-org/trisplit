@@ -191,7 +191,10 @@ let arrDrag = null;
 // While a chip is being dragged, engine pushes are parked in pendingState:
 // re-rendering would destroy the dragged node and WebKit cancels the drag.
 let chipDragging = false;
+let chipDragStart = 0;
 let pendingState = null;
+// A drag older than this is stale (dragend never reached us): stop parking pushes.
+const CHIP_DRAG_STALE_MS = 15000;
 let delArmed = false;
 
 // Tray/slot identity: bare "App" is the same window as "App#1".
@@ -416,7 +419,7 @@ function render() {
         chip.ondragstart = (e) => {
           e.dataTransfer.setData("text/plain", JSON.stringify({ app, screen: s.name, idx: j + 1 }));
           e.dataTransfer.effectAllowed = "move";
-          chipDragging = true;
+          chipDragging = true; chipDragStart = Date.now();
           // Deferred: pointer-events:none on .chip during dragstart aborts the drag in WebKit.
           setTimeout(() => { chip.classList.add("dragging"); document.body.classList.add("is-dragging"); }, 0);
         };
@@ -626,7 +629,7 @@ function renderChips() {
       c.ondragstart = (e) => {
         e.dataTransfer.setData("text/plain", JSON.stringify({ app: spec, tray: true }));
         e.dataTransfer.effectAllowed = "copy";
-        chipDragging = true;
+        chipDragging = true; chipDragStart = Date.now();
         setTimeout(() => { c.classList.add("dragging"); document.body.classList.add("is-dragging"); }, 0);
       };
       c.ondragend = () => {
@@ -730,6 +733,19 @@ function endChipDrag() {
   S = ps; W = null; render();
 }
 
+// Safety net: a drag that ends off-slot, outside the webview or on a detached chip may
+// never fire the chip's own dragend. Bubbling listeners run after slot.ondrop; a new
+// press means no drag is in progress. All are no-ops unless a drag is still marked live.
+function clearStrayChipDrag() {
+  if (!chipDragging) return;
+  document.body.classList.remove("is-dragging");
+  endChipDrag();
+}
+document.addEventListener("dragend", clearStrayChipDrag);
+document.addEventListener("drop", clearStrayChipDrag);
+document.addEventListener("pointerdown", clearStrayChipDrag, true);
+document.addEventListener("mousedown", clearStrayChipDrag, true);
+
 window.trisplitSetState = (s) => {
   if (!s || typeof s !== "object") return;
   if (!s.arrange || Array.isArray(s.arrange)) s.arrange = {};
@@ -739,6 +755,9 @@ window.trisplitSetState = (s) => {
   if (!Number.isInteger(s.active) || s.active < 1 || s.active > s.configs.length) s.active = 1;
   if (!Array.isArray(s.apps)) s.apps = [];
   if (!Array.isArray(s.screens)) s.screens = [];
+  if (chipDragging && Date.now() - chipDragStart > CHIP_DRAG_STALE_MS) {
+    chipDragging = false; pendingState = null; document.body.classList.remove("is-dragging");
+  }
   if (chipDragging) { pendingState = s; return; }
   if (arrDrag) arrDrag(true);
   S = s; W = null; render();
