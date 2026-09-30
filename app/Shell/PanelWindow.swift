@@ -126,7 +126,15 @@ final class PanelController: NSObject, WKScriptMessageHandler, WKNavigationDeleg
             engine.log("panel: mensaje no JSON")
             return
         }
-        let action = JSON.parse(body)?["action"]?.string
+        let msg = JSON.parse(body)
+        let action = msg?["action"]?.string
+        if action == "save" {
+            engine.log("panel msg save (coalesced)")
+        } else if action == "liveMove" {
+            engine.log("panel msg liveMove screen=\(msg?["screen"]?.string ?? "") idx=\(msg?["idx"]?.int ?? 0) app=\(msg?["app"]?.string ?? "")")
+        } else {
+            engine.log("panel msg \(action ?? "nil")")
+        }
         if action == "ready" { markReady() }
         // Panel posts "save" on every edit; coalesce like the v1 shim did.
         if action == "save" {

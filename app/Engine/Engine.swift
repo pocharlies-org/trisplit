@@ -101,6 +101,23 @@ final class Engine: @unchecked Sendable {
 
     // MARK: - Placement (AX queue)
 
+    /// Diagnostic: placeWindow plus immediate, +0.3s and +1.5s AX read-back of the frame.
+    private func placeWindowLogged(_ w: AXWindow, _ f: Rect) {
+        placeWindow(w, f)
+        let name = NSRunningApplication(processIdentifier: w.pid)?.localizedName ?? "pid \(w.pid)"
+        let tag = "\(name) \"\(w.title)\" id=\(w.id)"
+        let fmt: (Rect?) -> String = { r in
+            guard let r else { return "nil" }
+            return "(\(Int(r.x)),\(Int(r.y)) \(Int(r.w))x\(Int(r.h)))"
+        }
+        axLog("place \(tag) target=\(fmt(f)) readback=\(fmt(AX.frame(w.el)))")
+        for d in [0.3, 1.5] {
+            axQueue.asyncAfter(deadline: .now() + d) { [self] in
+                axLog("place \(tag) +\(d)s readback=\(fmt(AX.frame(w.el)))")
+            }
+        }
+    }
+
     /// Lua placeApp(). Blocking; AX queue only. Closed apps are skipped, never launched.
     private func placeApp(_ spec: String, _ frame: Rect) -> Bool {
         let (name, idx) = parseSpec(spec)
@@ -136,7 +153,7 @@ final class Engine: @unchecked Sendable {
             axLog("sin ventana para: \(name)")
             return false
         }
-        placeWindow(w, frame)
+        placeWindowLogged(w, frame)
         return true
     }
 
@@ -159,11 +176,15 @@ final class Engine: @unchecked Sendable {
                 jobs.append((app, gridFrame(s.visible, index: i + 1, cols: g.cols, rows: g.rows)))
             }
         }
+        log("applyConfig start jobs=\(jobs.count)")
         onAX({ [self] in
             var ok = true
             for (app, f) in jobs where !placeApp(app, f) { ok = false }
             return ok
-        }, then: { ok in completion?(ok) })
+        }, then: { [self] ok in
+            log("applyConfig end jobs=\(jobs.count) ok=\(ok)")
+            completion?(ok)
+        })
     }
 
     /// Lua cycle hotkey.
@@ -190,7 +211,7 @@ final class Engine: @unchecked Sendable {
         let ai = state.active - 1
         onAX({ () -> (String, Int)? in
             guard let w = focusedWindow() else { return nil }
-            placeWindow(w, frame)
+            self.placeWindowLogged(w, frame)
             focusWindow(w)
             let name = NSRunningApplication(processIdentifier: w.pid)?.localizedName ?? ""
             let wins = visibleWindows(pid: w.pid)

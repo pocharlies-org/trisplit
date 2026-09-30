@@ -72,6 +72,15 @@ enum AX {
         return _AXUIElementGetWindow(el, &id) == .success && id != 0 ? id : nil
     }
 
+    /// Current position+size (nil when either attribute is unreadable).
+    static func frame(_ el: AXUIElement) -> Rect? {
+        guard let pv = attr(el, kAXPositionAttribute), let sv = attr(el, kAXSizeAttribute) else { return nil }
+        var p = CGPoint.zero, sz = CGSize.zero
+        guard AXValueGetValue(pv as! AXValue, .cgPoint, &p),
+              AXValueGetValue(sv as! AXValue, .cgSize, &sz) else { return nil }
+        return Rect(x: p.x, y: p.y, w: sz.width, h: sz.height)
+    }
+
     static func raise(_ el: AXUIElement) {
         AXUIElementPerformAction(el, kAXRaiseAction as CFString)
     }
