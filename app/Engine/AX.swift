@@ -145,8 +145,10 @@ func focusedWindow() -> AXWindow? {
     return AXWindow(w, pid: pid)
 }
 
-/// Lua placeWindow(): unminimize, leave fullscreen, then position -> size -> position
-/// (the second move fixes cross-screen moves clamped by the old screen's size).
+/// Lua placeWindow(): unminimize, leave fullscreen, then position -> size -> position -> size
+/// (the second move fixes cross-screen moves clamped by the old screen's size; the second
+/// resize fixes apps like Chrome that drop the width while still being moved across screens).
+/// If the read-back size is still off by more than 2 px, wait 100 ms and retry once.
 func placeWindow(_ w: AXWindow, _ f: Rect) {
     if w.isMinimized { AX.setBool(w.el, kAXMinimizedAttribute, false) }
     if w.isFullscreen {
@@ -154,9 +156,16 @@ func placeWindow(_ w: AXWindow, _ f: Rect) {
         usleep(700_000)
     }
     let p = CGPoint(x: f.x, y: f.y)
+    let s = CGSize(width: f.w, height: f.h)
     AX.setPosition(w.el, p)
-    AX.setSize(w.el, CGSize(width: f.w, height: f.h))
+    AX.setSize(w.el, s)
     AX.setPosition(w.el, p)
+    AX.setSize(w.el, s)
+    if let r = AX.frame(w.el), abs(r.w - f.w) > 2 || abs(r.h - f.h) > 2 {
+        usleep(100_000)
+        AX.setSize(w.el, s)
+        AX.setPosition(w.el, p)
+    }
 }
 
 /// hs.window:focus(): front the app, make the window main and raise it.
