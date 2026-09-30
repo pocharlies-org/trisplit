@@ -101,7 +101,7 @@ final class Engine: @unchecked Sendable {
 
     // MARK: - Placement (AX queue)
 
-    /// Diagnostic: placeWindow plus immediate, +0.3s and +1.5s AX read-back of the frame.
+    /// Diagnostic: placeWindow plus immediate AX read-back of the frame.
     private func placeWindowLogged(_ w: AXWindow, _ f: Rect) {
         placeWindow(w, f)
         let name = NSRunningApplication(processIdentifier: w.pid)?.localizedName ?? "pid \(w.pid)"
@@ -111,15 +111,18 @@ final class Engine: @unchecked Sendable {
             return "(\(Int(r.x)),\(Int(r.y)) \(Int(r.w))x\(Int(r.h)))"
         }
         axLog("place \(tag) target=\(fmt(f)) readback=\(fmt(AX.frame(w.el)))")
-        for d in [0.3, 1.5] {
-            axQueue.asyncAfter(deadline: .now() + d) { [self] in
-                axLog("place \(tag) +\(d)s readback=\(fmt(AX.frame(w.el)))")
-            }
-        }
+    }
+
+    /// placeApp outside applyConfig (single placement, no per-run dedupe).
+    private func placeApp(_ spec: String, _ frame: Rect) -> Bool {
+        var placed = Set<CGWindowID>()
+        return placeApp(spec, frame, placed: &placed)
     }
 
     /// Lua placeApp(). Blocking; AX queue only. Closed apps are skipped, never launched.
-    private func placeApp(_ spec: String, _ frame: Rect) -> Bool {
+    /// `placed`: window ids already placed in this run; a window is never placed twice
+    /// (first slot wins) and the app is never activated/relaunched for such a slot.
+    private func placeApp(_ spec: String, _ frame: Rect, placed: inout Set<CGWindowID>) -> Bool {
         let (name, idx) = parseSpec(spec)
         let names = namesFor(name)
         guard let app = runningApp(names) else {
@@ -127,7 +130,12 @@ final class Engine: @unchecked Sendable {
             return true
         }
         var pid = app.processIdentifier
-        var win = pickWindow(visibleWindows(pid: pid), idx: idx)
+        let pick = pickUnplaced(visibleWindows(pid: pid), idx: idx, placed: placed, id: { $0.id })
+        if pick.alreadyPlaced {
+            axLog("ya colocada en otro slot, omitida: \(spec)")
+            return true
+        }
+        var win = pick.win
         if win == nil {
             app.activate(options: [])
             win = findWindow(pid: pid)
@@ -153,7 +161,12 @@ final class Engine: @unchecked Sendable {
             axLog("sin ventana para: \(name)")
             return false
         }
+        if w.id != 0 && placed.contains(w.id) {
+            axLog("ya colocada en otro slot, omitida: \(spec)")
+            return true
+        }
         placeWindowLogged(w, frame)
+        if w.id != 0 { placed.insert(w.id) }
         return true
     }
 
@@ -179,7 +192,8 @@ final class Engine: @unchecked Sendable {
         log("applyConfig start jobs=\(jobs.count)")
         onAX({ [self] in
             var ok = true
-            for (app, f) in jobs where !placeApp(app, f) { ok = false }
+            var placed = Set<CGWindowID>()
+            for (app, f) in jobs where !placeApp(app, f, placed: &placed) { ok = false }
             return ok
         }, then: { [self] ok in
             log("applyConfig end jobs=\(jobs.count) ok=\(ok)")

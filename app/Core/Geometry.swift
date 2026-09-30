@@ -53,6 +53,14 @@ func pickWindow<T>(_ wins: [T], idx: Int) -> T? {
     return (i >= 1 && i <= wins.count) ? wins[i - 1] : nil
 }
 
+/// pickWindow for one applyConfig run: the (clamped) idx-th window, or alreadyPlaced when an
+/// earlier slot already took it (`App#2` with a single window must not steal `App`'s window).
+func pickUnplaced<T, ID: Hashable>(_ wins: [T], idx: Int, placed: Set<ID>,
+                                   id: (T) -> ID) -> (win: T?, alreadyPlaced: Bool) {
+    guard let w = pickWindow(wins, idx: idx) else { return (nil, false) }
+    return placed.contains(id(w)) ? (nil, true) : (w, false)
+}
+
 /// math.floor to Int, nil for NaN/inf/absurd values (avoids Int() traps).
 func floorInt(_ d: Double) -> Int? {
     guard d.isFinite, abs(d) < 1e15 else { return nil }
