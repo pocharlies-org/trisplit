@@ -53,12 +53,21 @@ func pickWindow<T>(_ wins: [T], idx: Int) -> T? {
     return (i >= 1 && i <= wins.count) ? wins[i - 1] : nil
 }
 
-/// pickWindow for one applyConfig run: the (clamped) idx-th window, or alreadyPlaced when an
-/// earlier slot already took it (`App#2` with a single window must not steal `App`'s window).
-func pickUnplaced<T, ID: Hashable>(_ wins: [T], idx: Int, placed: Set<ID>,
-                                   id: (T) -> ID) -> (win: T?, alreadyPlaced: Bool) {
-    guard let w = pickWindow(wins, idx: idx) else { return (nil, false) }
-    return placed.contains(id(w)) ? (nil, true) : (w, false)
+/// Per-window slot winners for one applyConfig run. `targets[i]` is job i's resolved window id
+/// (0 = unresolved) and whether its index was exact (N <= window count) or clamped. When several
+/// jobs hit the same window, an exact job beats a clamped one and among ties the LAST job wins
+/// (`Code#2` clamped onto `Code`'s only window must not steal it). Id 0 is never deduped.
+/// Returns the indices of the jobs that keep their window.
+func slotWinners(_ targets: [(id: Int, exact: Bool)]) -> Set<Int> {
+    var keep = Set<Int>()
+    var best: [Int: Int] = [:]  // window id -> winning job index
+    for (i, t) in targets.enumerated() {
+        if t.id == 0 { keep.insert(i); continue }
+        if let b = best[t.id], targets[b].exact && !t.exact { continue }
+        best[t.id] = i
+    }
+    keep.formUnion(best.values)
+    return keep
 }
 
 /// math.floor to Int, nil for NaN/inf/absurd values (avoids Int() traps).

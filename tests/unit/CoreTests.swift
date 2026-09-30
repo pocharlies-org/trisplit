@@ -58,26 +58,18 @@ func geometryTests() {
         eq(floorInt(-1.5), -2); eq(floorInt(2.9), 2); eq(floorInt(.nan), nil); eq(floorInt(.infinity), nil)
         eq(flooredMod(-1, 3), 2); eq(flooredDiv(-1, 3), -1)
     }
-    test("pickUnplaced") {
-        let id: (Int) -> Int = { $0 }
-        // 1 window, specs App#1 + App#2 in the same run: second slot skipped.
-        var placed = Set<Int>()
-        let a = pickUnplaced([10], idx: 1, placed: placed, id: id)
-        eq(a.win, 10); eq(a.alreadyPlaced, false)
-        placed.insert(10)
-        let b = pickUnplaced([10], idx: 2, placed: placed, id: id)
-        eq(b.win, nil, "clamped to already-placed window"); eq(b.alreadyPlaced, true)
-        // 2 windows, App#1 + App#2: both placed, distinct.
-        placed = []
-        let c = pickUnplaced([10, 20], idx: 1, placed: placed, id: id)
-        eq(c.win, 10); eq(c.alreadyPlaced, false)
-        placed.insert(10)
-        let d = pickUnplaced([10, 20], idx: 2, placed: placed, id: id)
-        eq(d.win, 20); eq(d.alreadyPlaced, false)
-        // Empty placed set == pickWindow; no windows is not "already placed".
-        eq(pickUnplaced([10, 20, 30], idx: 9, placed: Set<Int>(), id: id).win, 30)
-        let e = pickUnplaced([Int](), idx: 1, placed: [10], id: id)
-        eq(e.win, nil); eq(e.alreadyPlaced, false)
+    test("slotWinners") {
+        // Code#2 (clamped) before Code (exact) on the same window: exact wins in either order.
+        eq(slotWinners([(id: 10, exact: false), (id: 10, exact: true)]), [1])
+        eq(slotWinners([(id: 10, exact: true), (id: 10, exact: false)]), [0])
+        // Identical exact (or clamped) duplicates: last wins.
+        eq(slotWinners([(id: 10, exact: true), (id: 10, exact: true)]), [1])
+        eq(slotWinners([(id: 10, exact: false), (id: 10, exact: false), (id: 10, exact: false)]), [2])
+        // Distinct windows all kept.
+        eq(slotWinners([(id: 10, exact: true), (id: 20, exact: false), (id: 30, exact: true)]), [0, 1, 2])
+        // Id 0 (unresolved) never deduped.
+        eq(slotWinners([(id: 0, exact: false), (id: 0, exact: true), (id: 0, exact: false)]), [0, 1, 2])
+        eq(slotWinners([]), [])
     }
 }
 

@@ -120,8 +120,7 @@ final class Engine: @unchecked Sendable {
     }
 
     /// Lua placeApp(). Blocking; AX queue only. Closed apps are skipped, never launched.
-    /// `placed`: window ids already placed in this run; a window is never placed twice
-    /// (first slot wins) and the app is never activated/relaunched for such a slot.
+    /// `placed`: window ids already placed in this run; a window is never placed twice.
     private func placeApp(_ spec: String, _ frame: Rect, placed: inout Set<CGWindowID>) -> Bool {
         let (name, idx) = parseSpec(spec)
         let names = namesFor(name)
@@ -130,12 +129,7 @@ final class Engine: @unchecked Sendable {
             return true
         }
         var pid = app.processIdentifier
-        let pick = pickUnplaced(visibleWindows(pid: pid), idx: idx, placed: placed, id: { $0.id })
-        if pick.alreadyPlaced {
-            axLog("ya colocada en otro slot, omitida: \(spec)")
-            return true
-        }
-        var win = pick.win
+        var win = pickWindow(visibleWindows(pid: pid), idx: idx)
         if win == nil {
             app.activate(options: [])
             win = findWindow(pid: pid)
@@ -191,9 +185,30 @@ final class Engine: @unchecked Sendable {
         }
         log("applyConfig start jobs=\(jobs.count)")
         onAX({ [self] in
+            // Resolve every job to its target window first, then dedupe: a window claimed by
+            // several slots goes to the exact-index slot (last one on ties), see slotWinners.
+            let resolved: [(win: AXWindow?, exact: Bool)] = jobs.map { job in
+                let (name, idx) = parseSpec(job.0)
+                guard let app = runningApp(namesFor(name)) else { return (nil, false) }
+                let wins = visibleWindows(pid: app.processIdentifier)
+                return (pickWindow(wins, idx: idx), idx <= wins.count)
+            }
+            let winners = slotWinners(resolved.map { (id: Int($0.win?.id ?? 0), exact: $0.exact) })
+            let targets = resolved.map { $0.win }
             var ok = true
             var placed = Set<CGWindowID>()
-            for (app, f) in jobs where !placeApp(app, f, placed: &placed) { ok = false }
+            for (i, (app, f)) in jobs.enumerated() {
+                guard winners.contains(i) else {
+                    axLog("ya colocada en otro slot, omitida: \(app)")
+                    continue
+                }
+                if let w = targets[i], w.id != 0, !placed.contains(w.id) {
+                    placeWindowLogged(w, f)
+                    placed.insert(w.id)
+                } else if !placeApp(app, f, placed: &placed) {
+                    ok = false
+                }
+            }
             return ok
         }, then: { [self] ok in
             log("applyConfig end jobs=\(jobs.count) ok=\(ok)")
