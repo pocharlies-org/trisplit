@@ -419,7 +419,7 @@
     assert(slots[0].querySelector(".sp.shrink"), "shrink shown");
   });
 
-  test("span: → grows into the empty right slot", () => {
+  test("span: ▶ grows into the empty right slot", () => {
     fresh();
     const g = slotOf(LC, 1).querySelector(".sp.grow");
     assert(g, "grow shown next to empty slot");
@@ -430,7 +430,7 @@
     assert(!slotOf(LC, 2).querySelector(".sp.grow"), "no grow at row end (WhatsApp is now .slot 2)");
   });
 
-  test("span: ← shrinks back", () => {
+  test("span: − shrinks back", () => {
     fresh((s) => { s.configs[0].monitors[LC].slots = ["Code#2", "<", ""]; });
     slotOf(LC, 1).querySelector(".sp.shrink").onclick({ stopPropagation() {} });
     eq(JSON.stringify(lcSaved()), JSON.stringify(["Code#2", "", ""]), "saved");
@@ -452,6 +452,73 @@
     fresh((s) => { s.configs[0].monitors[LC].slots = ["Code#2", "<", ""]; });
     drop(monBox(LC).querySelectorAll(".slot")[0], { app: "Slack", tray: true });
     eq(JSON.stringify(lcSaved()), JSON.stringify(["Slack", "", ""]), "saved");
+  });
+
+  const USER = ["", "Code", "Google Chrome"];
+  const key = (el, k) => el.dispatchEvent(new KeyboardEvent("keydown", { key: k, shiftKey: true, bubbles: true, cancelable: true }));
+  const lastMove = () => { const lm = byAction("liveMove"); return JSON.stringify(lm[lm.length - 1]); };
+
+  test("span: user layout shows ◀ on Code, nothing else", () => {
+    fresh((s) => { s.configs[0].monitors[LC].slots = USER.slice(); });
+    const code = slotOf(LC, 2);
+    const b = code.querySelector(".sp.left");
+    assert(b, "Code chip has a grow-left button");
+    eq(b.textContent, "◀", "glyph");
+    assert(b.title.includes("izquierda") && b.title.includes("⇧←"), "title mentions shortcut");
+    eq(b.draggable, false, "button not draggable");
+    assert(!code.querySelector(".sp.grow") && !code.querySelector(".sp.shrink"), "no grow-right/shrink");
+    assert(!slotOf(LC, 3).querySelector(".sp"), "Chrome: left occupied, row end on right");
+  });
+
+  test("span: ◀ grows into the empty left slot", () => {
+    fresh((s) => { s.configs[0].monitors[LC].slots = USER.slice(); });
+    slotOf(LC, 2).querySelector(".sp.left").onclick({ stopPropagation() {} });
+    eq(JSON.stringify(lcSaved()), JSON.stringify(["Code", "<", "Google Chrome"]), "saved");
+    eq(lastMove(), JSON.stringify({ action: "liveMove", screen: LC, idx: 1, app: "Code" }), "liveMove new owner");
+    const owner = slotOf(LC, 1);
+    eq(owner.style.gridColumn, "span 2", "owner spans 2");
+    assert(!owner.querySelector(".sp.left"), "no grow-left in first column");
+    const sh = owner.querySelector(".sp.shrink");
+    assert(sh, "shrink shown");
+    eq(sh.textContent, "−", "shrink glyph");
+  });
+
+  test("span: shrink after grow-left frees the right column", () => {
+    fresh((s) => { s.configs[0].monitors[LC].slots = ["Code", "<", "Google Chrome"]; });
+    slotOf(LC, 1).querySelector(".sp.shrink").onclick({ stopPropagation() {} });
+    eq(JSON.stringify(lcSaved()), JSON.stringify(["Code", "", "Google Chrome"]), "saved");
+    eq(lastMove(), JSON.stringify({ action: "liveMove", screen: LC, idx: 1, app: "Code" }), "liveMove");
+  });
+
+  test("span: ◀ keeps the existing continuation chain", () => {
+    fresh((s) => { s.configs[0].monitors[LC].slots = ["", "Code", "<"]; });
+    slotOf(LC, 2).querySelector(".sp.left").onclick({ stopPropagation() {} });
+    eq(JSON.stringify(lcSaved()), JSON.stringify(["Code", "<", "<"]), "saved");
+  });
+
+  test("span: ◀ not offered in first column or when left is occupied", () => {
+    fresh((s) => { s.configs[0].monitors[LC].slots = ["Code", "", "Google Chrome"]; });
+    assert(!slotOf(LC, 1).querySelector(".sp.left"), "first column");
+    fresh((s) => { s.configs[0].monitors[LC].slots = ["Code", "Slack", "Google Chrome"]; });
+    assert(!slotOf(LC, 2).querySelector(".sp.left"), "left occupied");
+    assert(!slotOf(LC, 3).querySelector(".sp.left"), "left occupied (row end)");
+  });
+
+  test("span: keyboard ⇧← / ⇧↓ / ⇧→", () => {
+    fresh((s) => { s.configs[0].monitors[LC].slots = USER.slice(); });
+    const saves = () => byAction("save").length;
+    let n = saves();
+    key(slotOf(LC, 3).querySelector(".chip"), "ArrowLeft");
+    eq(saves(), n, "⇧← on Chrome is a no-op (left occupied)");
+    key(slotOf(LC, 2).querySelector(".chip"), "ArrowLeft");
+    eq(JSON.stringify(lcSaved()), JSON.stringify(["Code", "<", "Google Chrome"]), "⇧← grows left");
+    key(slotOf(LC, 1).querySelector(".chip"), "ArrowDown");
+    eq(JSON.stringify(lcSaved()), JSON.stringify(["Code", "", "Google Chrome"]), "⇧↓ shrinks");
+    key(slotOf(LC, 1).querySelector(".chip"), "ArrowRight");
+    eq(JSON.stringify(lcSaved()), JSON.stringify(["Code", "<", "Google Chrome"]), "⇧→ grows right");
+    n = saves();
+    key(slotOf(LC, 1).querySelector(".chip"), "ArrowRight");
+    eq(saves(), n, "⇧→ at row end is a no-op");
   });
 
   report("panel: " + pass + " passed, " + fail + " failed");

@@ -128,16 +128,19 @@
     transition: opacity var(--t-1), background var(--t-1), color var(--t-1);
   }
   .chip .x:hover, .chip .x:focus-visible { opacity: 1; background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+  .chip:has(.sp) { padding-bottom: calc(var(--sp-1) + 26px); }
   .chip .sp {
-    position: absolute; bottom: var(--sp-1); width: 20px; height: 20px;
-    padding: 0; border: 0; background: transparent; box-shadow: none; line-height: 1;
+    position: absolute; bottom: var(--sp-1); width: 24px; height: 24px;
+    padding: 0; background: ButtonFace; box-shadow: none; line-height: 1;
+    border: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
     display: grid; place-items: center; border-radius: 50%;
-    color: GrayText; font-size: var(--f-xs); cursor: pointer; opacity: .55;
-    transition: opacity var(--t-1), background var(--t-1), color var(--t-1);
+    color: CanvasText; font-size: var(--f-xs); cursor: pointer; opacity: .85;
+    transition: opacity var(--t-1), background var(--t-1), color var(--t-1), border-color var(--t-1);
   }
+  .chip .sp.left { left: var(--sp-1); }
   .chip .sp.grow { right: var(--sp-1); }
-  .chip .sp.shrink { right: calc(var(--sp-1) + 22px); }
-  .chip .sp:hover, .chip .sp:focus-visible { opacity: 1; background: color-mix(in srgb, AccentColor 14%, transparent); color: AccentColor; }
+  .chip .sp.shrink { left: calc(50% - 12px); }
+  .chip .sp:hover, .chip .sp:focus-visible { opacity: 1; background: color-mix(in srgb, AccentColor 14%, ButtonFace); color: AccentColor; border-color: AccentColor; }
 
   #tray { background: Canvas; border-top: 1px solid var(--hair); padding: var(--sp-3) var(--sp-4); max-height: 170px; overflow-y: auto; scrollbar-width: thin; }
   #tray input { width: 100%; border: 1px solid var(--hair); border-radius: var(--r-sm); padding: 5px 9px; font-size: var(--f-sm); margin-bottom: var(--sp-2); background: Field; color: FieldText; }
@@ -272,6 +275,30 @@ function normalizeSpans(slots, cols) {
 function clearSpan(m, j) {
   const n = spanOf(m.slots, j, m.cols);
   for (let k = 1; k < n; k++) m.slots[j + k] = "";
+}
+// Span edits on owner j (0-based). Each returns the new owner index, or -1 when not allowed.
+function canGrowRight(m, j) {
+  const e = j + spanOf(m.slots, j, m.cols);
+  return e % Math.max(m.cols, 1) !== 0 && e < m.slots.length && m.slots[e] === "";
+}
+function canGrowLeft(m, j) {
+  return j % Math.max(m.cols, 1) !== 0 && m.slots[j - 1] === "";
+}
+function growRight(m, j) {
+  if (!m.slots[j] || m.slots[j] === SPAN || !canGrowRight(m, j)) return -1;
+  m.slots[j + spanOf(m.slots, j, m.cols)] = SPAN;
+  return j;
+}
+function growLeft(m, j) {
+  if (!m.slots[j] || m.slots[j] === SPAN || !canGrowLeft(m, j)) return -1;
+  m.slots[j - 1] = m.slots[j]; m.slots[j] = SPAN; // the "<" chain after j stays intact
+  return j - 1;
+}
+function shrink(m, j) {
+  const n = spanOf(m.slots, j, m.cols);
+  if (!m.slots[j] || n < 2) return -1;
+  m.slots[j + n - 1] = "";
+  return j;
 }
 
 function persist() {
@@ -449,29 +476,35 @@ function render() {
           kb.className = "kb"; kb.textContent = "⌘⌥" + n;
           chip.appendChild(kb);
         }
-        // → grows into the empty slot on the right (same row); ← gives back the last column.
-        const e = j + span;
-        const resize = (fn) => (ev) => {
-          ev.stopPropagation();
-          fn(); persist();
-          post({ action: "liveMove", screen: s.name, idx: j + 1, app });
+        // ◀ / ▶ grow into the empty slot on the left / right (same row); − gives back the last column.
+        const apply = (fn) => {
+          const owner = fn(m, j);
+          if (owner < 0) return false;
+          persist();
+          post({ action: "liveMove", screen: s.name, idx: owner + 1, app });
+          return true;
         };
-        if (span > 1) {
-          const sh = document.createElement("button");
-          sh.className = "sp shrink"; sh.title = "Ocupar una columna menos";
-          sh.setAttribute("aria-label", sh.title); sh.textContent = "←";
-          sh.onclick = resize(() => { m.slots[j + span - 1] = ""; });
-          chip.appendChild(sh);
-        }
-        if (e % m.cols !== 0 && e < m.slots.length && m.slots[e] === "") {
-          const gr = document.createElement("button");
-          gr.className = "sp grow"; gr.title = "Ocupar también el hueco de la derecha";
-          gr.setAttribute("aria-label", gr.title); gr.textContent = "→";
-          gr.onclick = resize(() => { m.slots[e] = SPAN; });
-          chip.appendChild(gr);
-        }
+        const spBtn = (cls, glyph, title, fn) => {
+          const b = document.createElement("button");
+          b.className = "sp " + cls; b.title = title; b.textContent = glyph;
+          b.setAttribute("aria-label", title);
+          b.draggable = false;
+          b.onmousedown = (ev) => ev.stopPropagation();
+          b.ondragstart = (ev) => { ev.preventDefault(); ev.stopPropagation(); };
+          b.onclick = (ev) => { ev.stopPropagation(); apply(fn); };
+          chip.appendChild(b);
+        };
+        if (canGrowLeft(m, j)) spBtn("left", "◀", "Ocupar también el hueco de la izquierda (⇧←)", growLeft);
+        if (span > 1) spBtn("shrink", "−", "Ocupar una columna menos (⇧↓)", shrink);
+        if (canGrowRight(m, j)) spBtn("grow", "▶", "Ocupar también el hueco de la derecha (⇧→)", growRight);
         x.onclick = (ev) => { ev.stopPropagation(); clearSpan(m, j); m.slots[j] = ""; persist(); };
+        const spanKeys = { ArrowLeft: growLeft, ArrowRight: growRight, ArrowDown: shrink };
         chip.onkeydown = (ev) => {
+          if (ev.shiftKey && spanKeys[ev.key]) {
+            ev.preventDefault(); ev.stopPropagation();
+            apply(spanKeys[ev.key]);
+            return;
+          }
           if (ev.key !== "Delete" && ev.key !== "Backspace") return;
           ev.preventDefault(); ev.stopPropagation();
           clearSpan(m, j); m.slots[j] = ""; persist();
