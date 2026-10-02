@@ -33,6 +33,17 @@ func gridFrame(_ f: Rect, index i: Int, cols: Int, rows: Int, span: Int = 1) -> 
     return Rect(x: f.x + Double(col) * (w + GAP), y: f.y + Double(row) * (h + GAP), w: n * w + (n - 1) * GAP, h: h)
 }
 
+/// Ids of the candidate windows covered by `target`: their frame CENTER lies inside it
+/// (inclusive edges). Ids in `keep` and id 0 (unknown window) are never returned.
+func windowsCovered(by target: Rect, candidates: [(id: UInt32, frame: Rect)], keep: Set<UInt32>) -> [UInt32] {
+    candidates.compactMap { c in
+        guard c.id != 0, !keep.contains(c.id) else { return nil }
+        let cx = c.frame.x + c.frame.w / 2, cy = c.frame.y + c.frame.h / 2
+        let inside = cx >= target.x && cx <= target.x + target.w && cy >= target.y && cy <= target.y + target.h
+        return inside ? c.id : nil
+    }
+}
+
 /// Slot value meaning "continuation of the slot to my left in the same row".
 let SPAN_MARK = "<"
 

@@ -46,6 +46,8 @@ Una app puede ocupar varias columnas seguidas de la misma fila. En el panel, cad
 
 Los atajos funcionan con el chip enfocado (Tab); si la acción no está permitida no hacen nada.
 
+Al colocar o ensanchar una app, las ventanas que no están en la rejilla y quedan tapadas se minimizan.
+
 En `trisplit.json` la continuación se escribe como `"<"`: `["Code", "<", "Claude"]` en 3 columnas deja Code en 2/3 y Claude en 1/3. Un `"<"` no cruza filas, y si está en la primera columna o detrás de un hueco vacío se ignora. Los atajos `⌘⌥N` cuentan solo los huecos reales (en el ejemplo, Code es el 1 y Claude el 2).
 
 ## Ficheros

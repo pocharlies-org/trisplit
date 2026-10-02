@@ -284,7 +284,50 @@ final class Engine: @unchecked Sendable {
         guard axGuard(completion) else { return }
         let f = gridFrame(s.visible, index: idx, cols: g.cols, rows: g.rows,
                           span: spanCount(g.slots, index: idx, cols: g.cols))
-        onAX({ [self] in placeApp(app, f) }, then: { ok in completion?(ok) })
+        // Capture the other slots now: the active config may change while AX work runs.
+        var others: [String] = []
+        if let cfg = state.activeConfig {
+            for sc in screens() {
+                guard let mg = cfg.monitors[sc.name] else { continue }
+                for (i, a) in mg.slots.enumerated() where !a.isEmpty && a != SPAN_MARK {
+                    if sc.name == screen && i + 1 == idx { continue }
+                    others.append(a)
+                }
+            }
+        }
+        onAX({ [self] in
+            var placed = Set<CGWindowID>()
+            let ok = placeApp(app, f, placed: &placed)
+            if ok && !placed.isEmpty { minimizeCovered(by: f, placer: app, keep: placed, otherSlots: others) }
+            return ok
+        }, then: { ok in completion?(ok) })
+    }
+
+    /// Minimizes windows that are not in the grid and whose center lies inside `f` (just
+    /// covered by `placer`). Windows resolved for any other slot of the config are kept. AX queue only.
+    private func minimizeCovered(by f: Rect, placer: String, keep placed: Set<CGWindowID>, otherSlots: [String]) {
+        var keep = placed
+        for spec in otherSlots {
+            let (name, idx) = parseSpec(spec)
+            guard let a = runningApp(namesFor(name)),
+                  let w = pickWindow(visibleWindows(pid: a.processIdentifier), idx: idx), w.id != 0 else { continue }
+            keep.insert(w.id)
+        }
+        var wins: [CGWindowID: AXWindow] = [:]
+        var candidates: [(id: UInt32, frame: Rect)] = []
+        for a in runningApps() where a.activationPolicy == .regular {
+            for w in visibleWindows(pid: a.processIdentifier) where w.id != 0 {
+                guard let fr = AX.frame(w.el) else { continue }
+                wins[w.id] = w
+                candidates.append((id: w.id, frame: fr))
+            }
+        }
+        for id in windowsCovered(by: f, candidates: candidates, keep: keep) {
+            guard let w = wins[id] else { continue }
+            AX.setBool(w.el, kAXMinimizedAttribute, true)
+            let name = NSRunningApplication(processIdentifier: w.pid)?.localizedName ?? "pid \(w.pid)"
+            axLog("minimizada (tapada por \(placer)): \(name) \(id)")
+        }
     }
 
     /// Lua panelState(); visible-window enumeration runs on the AX queue.

@@ -62,6 +62,16 @@ func geometryTests() {
         let fs = flatSlots(Config(name: "C", monitors: ["LC49G95T": m]), sortedScreenNames: ["LC49G95T"])
         eq(fs.map(\.idx), [1, 3], "marker skipped"); eq(fs.map(\.span), [2, 1])
     }
+    test("windowsCovered") {
+        let t = Rect(x: 0, y: 0, w: 1000, h: 500)
+        let inside = (id: UInt32(7), frame: Rect(x: 600, y: 0, w: 300, h: 500))
+        let edge = (id: UInt32(8), frame: Rect(x: 900, y: 0, w: 400, h: 500))
+        let zero = (id: UInt32(0), frame: Rect(x: 100, y: 100, w: 100, h: 100))
+        eq(windowsCovered(by: t, candidates: [inside], keep: []), [7], "center inside")
+        eq(windowsCovered(by: t, candidates: [edge], keep: []), [], "overlaps edge, center outside")
+        eq(windowsCovered(by: t, candidates: [inside], keep: [7]), [], "kept")
+        eq(windowsCovered(by: t, candidates: [zero], keep: []), [], "id 0 ignored")
+    }
     test("newMonitorGrid") {
         let g = newMonitorGrid(cols: 3, rows: 2)
         eq(g.slots.count, 6); eq(g.slots, Array(repeating: "", count: 6)); eq(g.cols, 3); eq(g.rows, 2)
