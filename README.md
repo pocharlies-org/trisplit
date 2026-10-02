@@ -110,6 +110,35 @@ de búsqueda y lo borra junto con su directorio).
 - Sólo ventanas del Space actual.
 - Reordenar monitores requiere `displayplacer` en `/opt/homebrew/bin`.
 
+## Flujo de contribución (PRs)
+
+`main` está protegida por un ruleset del repositorio (`main: PR aprobada obligatoria`):
+
+- Nada entra en `main` sin PR. El push directo y el force-push están bloqueados y `main`
+  no se puede borrar.
+- Hace falta **1 aprobación**. Se descarta si se empujan commits nuevos, y todas las
+  conversaciones del PR tienen que estar resueltas.
+- El workflow **PR review** (review automática con DeepSeek vía LiteLLM) corre en cada PR.
+  Su check `review / Review del PR` es obligatorio, pero no bloquea si el modelo no está
+  disponible: el job termina en verde igualmente.
+
+Pasos:
+
+```bash
+git switch -c tipo/descripcion      # feat/, fix/, docs/, ci/...
+# commits
+make unit && make panel
+git push -u origin HEAD
+gh pr create --fill
+# revisión y aprobación
+gh pr merge --squash --delete-branch
+```
+
+GitHub no deja aprobar tu propio PR. Como único mantenedor, el admin puede mergear
+saltándose la aprobación con `gh pr merge --squash --admin`; el bypass sólo vale al
+mergear un PR, nunca para empujar directo a `main`. Úsalo conscientemente: es preferible
+pedir review a otra persona.
+
 ## Licencia
 
 MIT — ver [LICENSE](LICENSE).
