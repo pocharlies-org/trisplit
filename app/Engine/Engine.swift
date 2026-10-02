@@ -179,8 +179,9 @@ final class Engine: @unchecked Sendable {
         var jobs: [(String, Rect)] = []
         for s in screens() {
             guard let g = cfg.monitors[s.name] else { continue }
-            for (i, app) in g.slots.enumerated() where !app.isEmpty {
-                jobs.append((app, gridFrame(s.visible, index: i + 1, cols: g.cols, rows: g.rows)))
+            for (i, app) in g.slots.enumerated() where !app.isEmpty && app != SPAN_MARK {
+                let span = spanCount(g.slots, index: i + 1, cols: g.cols)
+                jobs.append((app, gridFrame(s.visible, index: i + 1, cols: g.cols, rows: g.rows, span: span)))
             }
         }
         log("applyConfig start jobs=\(jobs.count)")
@@ -235,7 +236,7 @@ final class Engine: @unchecked Sendable {
             return
         }
         guard axGuard(nil) else { return }
-        let frame = gridFrame(s.visible, index: slot.idx, cols: slot.cols, rows: slot.rows)
+        let frame = gridFrame(s.visible, index: slot.idx, cols: slot.cols, rows: slot.rows, span: slot.span)
         // Capture the config now: the active one may change while AX work runs.
         let ai = state.active - 1
         onAX({ () -> (String, Int)? in
@@ -281,7 +282,8 @@ final class Engine: @unchecked Sendable {
         guard !app.isEmpty, let s = screenNamed(screen, in: screens()),
               let g = state.activeConfig?.monitors[screen] else { completion?(false); return }
         guard axGuard(completion) else { return }
-        let f = gridFrame(s.visible, index: idx, cols: g.cols, rows: g.rows)
+        let f = gridFrame(s.visible, index: idx, cols: g.cols, rows: g.rows,
+                          span: spanCount(g.slots, index: idx, cols: g.cols))
         onAX({ [self] in placeApp(app, f) }, then: { ok in completion?(ok) })
     }
 

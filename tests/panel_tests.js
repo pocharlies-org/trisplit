@@ -407,5 +407,52 @@
     fresh();
   });
 
+  const LC = "LC49G95T";
+  const lcSaved = () => { const sv = byAction("save"); return sv[sv.length - 1].configs[0].monitors[LC].slots; };
+
+  test("span: '<' renders as one wide slot", () => {
+    fresh((s) => { s.configs[0].monitors[LC].slots = ["Code#2", "<", ""]; });
+    const slots = monBox(LC).querySelectorAll(".slot");
+    eq(slots.length, 2, "marker cell not rendered");
+    eq(slots[0].style.gridColumn, "span 2", "owner spans 2");
+    assert(slots[0].querySelector(".sp.grow"), "grow shown: right cell is empty");
+    assert(slots[0].querySelector(".sp.shrink"), "shrink shown");
+  });
+
+  test("span: → grows into the empty right slot", () => {
+    fresh();
+    const g = slotOf(LC, 1).querySelector(".sp.grow");
+    assert(g, "grow shown next to empty slot");
+    g.onclick({ stopPropagation() {} });
+    eq(JSON.stringify(lcSaved()), JSON.stringify(["Code#2", "<", LRM + "WhatsApp"]), "saved");
+    const lm = byAction("liveMove");
+    eq(JSON.stringify(lm[lm.length - 1]), JSON.stringify({ action: "liveMove", screen: LC, idx: 1, app: "Code#2" }), "liveMove");
+    assert(!slotOf(LC, 2).querySelector(".sp.grow"), "no grow at row end (WhatsApp is now .slot 2)");
+  });
+
+  test("span: ← shrinks back", () => {
+    fresh((s) => { s.configs[0].monitors[LC].slots = ["Code#2", "<", ""]; });
+    slotOf(LC, 1).querySelector(".sp.shrink").onclick({ stopPropagation() {} });
+    eq(JSON.stringify(lcSaved()), JSON.stringify(["Code#2", "", ""]), "saved");
+  });
+
+  test("span: ✕ clears the owner and its continuation", () => {
+    fresh((s) => { s.configs[0].monitors[LC].slots = ["Code#2", "<", ""]; });
+    slotOf(LC, 1).querySelector(".x").onclick({ stopPropagation() {} });
+    eq(JSON.stringify(lcSaved()), JSON.stringify(["", "", ""]), "saved");
+  });
+
+  test("span: orphan markers are normalized away", () => {
+    fresh((s) => { s.configs[0].monitors[LC].slots = ["<", "", "<"]; });
+    eq(monBox(LC).querySelectorAll(".slot").length, 3, "three plain cells");
+    assert(!monBox(LC).querySelector(".slot .chip"), "no chips for orphans");
+  });
+
+  test("span: tray drop on a wide slot drops its continuation", () => {
+    fresh((s) => { s.configs[0].monitors[LC].slots = ["Code#2", "<", ""]; });
+    drop(monBox(LC).querySelectorAll(".slot")[0], { app: "Slack", tray: true });
+    eq(JSON.stringify(lcSaved()), JSON.stringify(["Slack", "", ""]), "saved");
+  });
+
   report("panel: " + pass + " passed, " + fail + " failed");
 })();

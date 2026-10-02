@@ -36,6 +36,15 @@ git clone https://github.com/pocharlies/trisplit && cd trisplit && make cert && 
 
 URLs: `open trisplit://apply`, `trisplit://next`, `trisplit://panel`.
 
+## Huecos que ocupan varias columnas
+
+Una app puede ocupar varias columnas seguidas de la misma fila. En el panel, cada chip tiene:
+
+- **→**: ocupa también el hueco de la derecha (solo aparece si está vacío).
+- **←**: ocupa una columna menos.
+
+En `trisplit.json` la continuación se escribe como `"<"`: `["Code", "<", "Claude"]` en 3 columnas deja Code en 2/3 y Claude en 1/3. Un `"<"` no cruza filas, y si está en la primera columna o detrás de un hueco vacío se ignora. Los atajos `⌘⌥N` cuentan solo los huecos reales (en el ejemplo, Code es el 1 y Claude el 2).
+
 ## Ficheros
 
 - Estado: `~/Library/Application Support/trisplit/trisplit.json`

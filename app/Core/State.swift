@@ -9,7 +9,8 @@ struct MonitorGrid: Encodable, Equatable {
     static func from(_ j: JSON) -> MonitorGrid? {
         guard let o = j.object else { return nil }
         let slots = (o["slots"]?.array ?? []).map { $0.string ?? "" }
-        return MonitorGrid(cols: o["cols"]?.int ?? 1, rows: o["rows"]?.int ?? 1, slots: slots)
+        let cols = o["cols"]?.int ?? 1
+        return MonitorGrid(cols: cols, rows: o["rows"]?.int ?? 1, slots: normalizeSpans(slots, cols: cols))
     }
 }
 

@@ -7,18 +7,21 @@ struct FlatSlot: Equatable {
     var cols: Int
     var rows: Int
     var app: String
+    var span: Int = 1
 }
 
 let DEFAULT_SLOTS: [String: [String]] = ["Odyssey G95C": ["OpenChamber", "Code", "Claude"]]
 
 /// Lua flatSlots(): sorted screens with a monitor in the config, then slot order.
+/// SPAN_MARK continuations are skipped (hotkeys address the owner); `span` is the owner's width.
 func flatSlots(_ cfg: Config?, sortedScreenNames: [String]) -> [FlatSlot] {
     guard let cfg else { return [] }
     var out: [FlatSlot] = []
     for name in sortedScreenNames {
         guard let m = cfg.monitors[name] else { continue }
-        for (i, app) in m.slots.enumerated() {
-            out.append(FlatSlot(screen: name, idx: i + 1, cols: m.cols, rows: m.rows, app: app))
+        for (i, app) in m.slots.enumerated() where app != SPAN_MARK {
+            out.append(FlatSlot(screen: name, idx: i + 1, cols: m.cols, rows: m.rows, app: app,
+                                span: spanCount(m.slots, index: i + 1, cols: m.cols)))
         }
     }
     return out

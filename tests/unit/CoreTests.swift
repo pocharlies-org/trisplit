@@ -45,6 +45,23 @@ func geometryTests() {
         let frac = gridFrame(Rect(x: 0, y: 0, w: 1001, h: 500), index: 1, cols: 2, rows: 1)
         near(frac.w, 498.5, "no flooring")
     }
+    test("spans") {
+        eq(spanCount(["Code", "<", "Claude"], index: 1, cols: 3), 2)
+        eq(spanCount(["Code", "<", "Claude"], index: 2, cols: 3), 0, "marker itself")
+        eq(spanCount(["Code", "<", "Claude"], index: 3, cols: 3), 1)
+        eq(spanCount(["A", "<", "<", "<"], index: 1, cols: 2), 2, "stops at row end")
+        eq(spanCount(["", "<"], index: 1, cols: 2), 1, "empty owner")
+        eq(normalizeSpans(["<", "A", "<", "", "<", "<"], cols: 3), ["", "A", "<", "", "", ""])
+        eq(normalizeSpans(["A", "<", "<"], cols: 3), ["A", "<", "<"])
+        let f = Rect(x: 0, y: 0, w: 1000, h: 500)
+        let w3 = (1000.0 - 8) / 3
+        let s = gridFrame(f, index: 1, cols: 3, rows: 1, span: 2)
+        near(s.x, 0); near(s.w, 2 * w3 + 4, "2 cols + gap")
+        near(gridFrame(f, index: 3, cols: 3, rows: 1, span: 5).w, w3, "clamped to row end")
+        let m = MonitorGrid(cols: 3, rows: 1, slots: ["Code", "<", "Claude"])
+        let fs = flatSlots(Config(name: "C", monitors: ["LC49G95T": m]), sortedScreenNames: ["LC49G95T"])
+        eq(fs.map(\.idx), [1, 3], "marker skipped"); eq(fs.map(\.span), [2, 1])
+    }
     test("newMonitorGrid") {
         let g = newMonitorGrid(cols: 3, rows: 2)
         eq(g.slots.count, 6); eq(g.slots, Array(repeating: "", count: 6)); eq(g.cols, 3); eq(g.rows, 2)

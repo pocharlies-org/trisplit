@@ -128,6 +128,16 @@
     transition: opacity var(--t-1), background var(--t-1), color var(--t-1);
   }
   .chip .x:hover, .chip .x:focus-visible { opacity: 1; background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+  .chip .sp {
+    position: absolute; bottom: var(--sp-1); width: 20px; height: 20px;
+    padding: 0; border: 0; background: transparent; box-shadow: none; line-height: 1;
+    display: grid; place-items: center; border-radius: 50%;
+    color: GrayText; font-size: var(--f-xs); cursor: pointer; opacity: .55;
+    transition: opacity var(--t-1), background var(--t-1), color var(--t-1);
+  }
+  .chip .sp.grow { right: var(--sp-1); }
+  .chip .sp.shrink { right: calc(var(--sp-1) + 22px); }
+  .chip .sp:hover, .chip .sp:focus-visible { opacity: 1; background: color-mix(in srgb, AccentColor 14%, transparent); color: AccentColor; }
 
   #tray { background: Canvas; border-top: 1px solid var(--hair); padding: var(--sp-3) var(--sp-4); max-height: 170px; overflow-y: auto; scrollbar-width: thin; }
   #tray input { width: 100%; border: 1px solid var(--hair); border-radius: var(--r-sm); padding: 5px 9px; font-size: var(--f-sm); margin-bottom: var(--sp-2); background: Field; color: FieldText; }
@@ -231,13 +241,38 @@ function rebuildGroups() {
   W = new Map();
   for (const s of screens()) {
     const m = cfg().monitors[s.name];
-    if (m) W.set(s.name, { cols: m.cols, rows: m.rows, slots: m.slots.map(a => a || "") });
+    if (m) W.set(s.name, { cols: m.cols, rows: m.rows, slots: normalizeSpans(m.slots.map(a => a || ""), m.cols) });
     else W.set(s.name, { cols: 3, rows: 1, slots: ["", "", ""] });
   }
   for (const name of Object.keys(cfg().monitors))
     if (!W.has(name)) W.set(name, cfg().monitors[name]);
 }
 function groups() { if (!W) rebuildGroups(); return W; }
+
+// "<" = continuation of the slot to its left in the same row (mirrors Core/Geometry.swift).
+const SPAN = "<";
+// Columns covered by 0-based slot j: 0 for a "<" cell, 1 for an empty owner.
+function spanOf(slots, j, cols) {
+  const c = Math.max(cols, 1);
+  if (slots[j] === SPAN) return 0;
+  if (!slots[j]) return 1;
+  let n = 1;
+  while ((j + n) % c !== 0 && j + n < slots.length && slots[j + n] === SPAN) n++;
+  return n;
+}
+// Orphan "<" (first column of a row, or right of an empty slot) become "".
+function normalizeSpans(slots, cols) {
+  const c = Math.max(cols, 1);
+  const out = slots.slice();
+  for (let k = 0; k < out.length; k++)
+    if (out[k] === SPAN && (k % c === 0 || !out[k - 1])) out[k] = "";
+  return out;
+}
+// Free the "<" cells owned by slot j (the owner itself is left untouched).
+function clearSpan(m, j) {
+  const n = spanOf(m.slots, j, m.cols);
+  for (let k = 1; k < n; k++) m.slots[j + k] = "";
+}
 
 function persist() {
   const g = groups();
@@ -254,6 +289,7 @@ function flatIndex(screen, idx) {
     const m = groups().get(s.name);
     if (!m) continue;
     for (let i = 1; i <= m.slots.length; i++) {
+      if (m.slots[i - 1] === SPAN) continue; // hotkeys address owners only, like flatSlots
       n++;
       if (s.name === screen && i === idx) return n;
     }
@@ -268,7 +304,7 @@ function setColsRows(name, dCols, dRows) {
   const total = cols * rows;
   const next = [];
   for (let i = 0; i < total; i++) next.push(m.slots[i] || "");
-  m.cols = cols; m.rows = rows; m.slots = next;
+  m.cols = cols; m.rows = rows; m.slots = normalizeSpans(next, cols);
   persist();
 }
 
@@ -385,7 +421,10 @@ function render() {
     grid.style.gridTemplateColumns = "repeat(" + m.cols + ", 1fr)";
     grid.style.gridTemplateRows = "repeat(" + m.rows + ", 1fr)";
     m.slots.forEach((app, j) => {
+      if (app === SPAN) return; // covered by the owner to its left
+      const span = spanOf(m.slots, j, m.cols);
       const slot = document.createElement("div");
+      if (span > 1) slot.style.gridColumn = "span " + span;
       slot.className = "slot" + (app ? " occupied" : "");
       const label = app ? app.replace(/#(\d+)$/, " · ventana $1") : "";
       slot.setAttribute("role", "group");
@@ -410,11 +449,32 @@ function render() {
           kb.className = "kb"; kb.textContent = "⌘⌥" + n;
           chip.appendChild(kb);
         }
-        x.onclick = (e) => { e.stopPropagation(); m.slots[j] = ""; persist(); };
-        chip.onkeydown = (e) => {
-          if (e.key !== "Delete" && e.key !== "Backspace") return;
-          e.preventDefault(); e.stopPropagation();
-          m.slots[j] = ""; persist();
+        // → grows into the empty slot on the right (same row); ← gives back the last column.
+        const e = j + span;
+        const resize = (fn) => (ev) => {
+          ev.stopPropagation();
+          fn(); persist();
+          post({ action: "liveMove", screen: s.name, idx: j + 1, app });
+        };
+        if (span > 1) {
+          const sh = document.createElement("button");
+          sh.className = "sp shrink"; sh.title = "Ocupar una columna menos";
+          sh.setAttribute("aria-label", sh.title); sh.textContent = "←";
+          sh.onclick = resize(() => { m.slots[j + span - 1] = ""; });
+          chip.appendChild(sh);
+        }
+        if (e % m.cols !== 0 && e < m.slots.length && m.slots[e] === "") {
+          const gr = document.createElement("button");
+          gr.className = "sp grow"; gr.title = "Ocupar también el hueco de la derecha";
+          gr.setAttribute("aria-label", gr.title); gr.textContent = "→";
+          gr.onclick = resize(() => { m.slots[e] = SPAN; });
+          chip.appendChild(gr);
+        }
+        x.onclick = (ev) => { ev.stopPropagation(); clearSpan(m, j); m.slots[j] = ""; persist(); };
+        chip.onkeydown = (ev) => {
+          if (ev.key !== "Delete" && ev.key !== "Backspace") return;
+          ev.preventDefault(); ev.stopPropagation();
+          clearSpan(m, j); m.slots[j] = ""; persist();
         };
         chip.ondragstart = (e) => {
           e.dataTransfer.setData("text/plain", JSON.stringify({ app, screen: s.name, idx: j + 1 }));
@@ -442,12 +502,17 @@ function render() {
         let p; try { p = JSON.parse(e.dataTransfer.getData("text/plain")); } catch { render(); return; }
         const tgt = groups().get(s.name);
         if (!tgt) { render(); return; }
+        // A move resets spans on both ends: the new tenant starts at one column.
+        if (!p.tray && p.screen === s.name && p.idx === j + 1) { render(); return; }
         if (p.tray) {
+          clearSpan(tgt, j);
           tgt.slots[j] = p.app;
           post({ action: "liveMove", screen: s.name, idx: j + 1, app: p.app });
         } else {
           const src = groups().get(p.screen);
           if (!src || !(p.idx >= 1 && p.idx <= src.slots.length)) { render(); return; }
+          clearSpan(tgt, j);
+          clearSpan(src, p.idx - 1);
           const tmp = tgt.slots[j];
           tgt.slots[j] = src.slots[p.idx - 1];
           src.slots[p.idx - 1] = tmp;
@@ -588,7 +653,7 @@ function placeInFirstFree(spec) {
   for (const s of screens()) {
     const m = groups().get(s.name);
     for (let i = 0; i < m.slots.length; i++) {
-      if (!m.slots[i]) {
+      if (m.slots[i] === "") {
         m.slots[i] = spec;
         post({ action: "liveMove", screen: s.name, idx: i + 1, app: spec });
         persist();
@@ -603,7 +668,7 @@ function renderChips() {
   const q = qRaw.toLowerCase();
   const used = new Set();
   for (const m of groups().values())
-    for (const a of m.slots) if (a) used.add(specKey(a));
+    for (const a of m.slots) if (a && a !== SPAN) used.add(specKey(a));
   const box = document.getElementById("chips");
   box.replaceChildren();
   let shown = 0;

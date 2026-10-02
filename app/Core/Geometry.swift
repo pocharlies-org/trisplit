@@ -22,13 +22,41 @@ func flooredDiv(_ a: Int, _ b: Int) -> Int {
 }
 
 /// Slot `index` (1-based) of a cols×rows grid inside `f` (the screen's visible frame).
-func gridFrame(_ f: Rect, index i: Int, cols: Int, rows: Int) -> Rect {
+func gridFrame(_ f: Rect, index i: Int, cols: Int, rows: Int, span: Int = 1) -> Rect {
     let c = max(cols, 1), r = max(rows, 1)
     let w = (f.w - GAP * Double(c - 1)) / Double(c)
     let h = (f.h - GAP * Double(r - 1)) / Double(r)
     let col = flooredMod(i - 1, c)
     let row = flooredDiv(i - 1, c)
-    return Rect(x: f.x + Double(col) * (w + GAP), y: f.y + Double(row) * (h + GAP), w: w, h: h)
+    // Clamp so a span never runs past the end of its row.
+    let n = Double(min(max(span, 1), c - col))
+    return Rect(x: f.x + Double(col) * (w + GAP), y: f.y + Double(row) * (h + GAP), w: n * w + (n - 1) * GAP, h: h)
+}
+
+/// Slot value meaning "continuation of the slot to my left in the same row".
+let SPAN_MARK = "<"
+
+/// Columns covered by 1-based slot i: 1 + consecutive SPAN_MARKs to its right in the same row.
+/// Returns 0 when slot i is itself a SPAN_MARK. An empty owner spans 1: markers after an
+/// empty slot are orphans (see normalizeSpans) and never extend it.
+func spanCount(_ slots: [String], index i: Int, cols: Int) -> Int {
+    let c = max(cols, 1)
+    guard i >= 1 && i <= slots.count else { return 1 }
+    if slots[i - 1] == SPAN_MARK { return 0 }
+    if slots[i - 1].isEmpty { return 1 }
+    var n = 1
+    while flooredMod(i - 1 + n, c) != 0, i - 1 + n < slots.count, slots[i - 1 + n] == SPAN_MARK { n += 1 }
+    return n
+}
+
+/// Orphan SPAN_MARKs (first column of a row, or right of an empty slot) become "".
+func normalizeSpans(_ slots: [String], cols: Int) -> [String] {
+    let c = max(cols, 1)
+    var out = slots
+    for k in out.indices where out[k] == SPAN_MARK {
+        if k % c == 0 || out[k - 1].isEmpty { out[k] = "" }
+    }
+    return out
 }
 
 /// "App#N" = N-th window of App. Mirrors Lua `^(.-)#(%d+)$`: the last `#` followed
