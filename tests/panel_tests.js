@@ -109,7 +109,7 @@
 
   test("XSS strings render as text, no elements injected", () => {
     fresh();
-    eq(document.querySelectorAll("img").length, 0, "img elements");
+    eq(document.querySelectorAll("img:not(.ic)").length, 0, "img elements (icons excluded)");
     eq(document.querySelectorAll("#chips i, #monitors b, #monitors i").length, 0, "injected tags");
     assert(tchips().some((c) => c.textContent.includes("<img src=x")), "title shown literally");
     assert(tchips().some((c) => c.textContent === "<i>Evil</i>"), "app name shown literally");
@@ -240,23 +240,46 @@
 
   test("H: window index labelled 'ventana N' in chip and tray", () => {
     fresh();
-    eq(slotOf("LC49G95T", 1).querySelector(".chip .nm").textContent, "Code · ventana 2", "chip label");
+    eq(slotOf("LC49G95T", 1).querySelector(".chip .nm").textContent, "Code", "chip name");
+    eq(slotOf("LC49G95T", 1).querySelector(".chip .win").textContent, "ventana 2", "chip window index");
     assert(tchips().some((c) => c.textContent.startsWith("Code · ventana 1")), "tray label");
     assert(!document.body.textContent.includes(" · v2"), "no legacy ' · v2'");
   });
 
-  test("B: empty tray shows filter message or no-apps message", () => {
-    fresh();
-    const f = document.getElementById("filter");
-    f.value = "zzzNope"; f.oninput();
-    const e1 = document.querySelector("#chips .empty");
-    assert(e1, "empty element (filter)");
-    eq(e1.textContent, 'Sin resultados para "zzzNope"', "filter message");
-    f.value = "";
+  test("B: empty tray shows no-apps message", () => {
     fresh((s) => { s.apps = []; });
     eq(document.querySelector("#chips .empty").textContent, "No hay apps con ventanas visibles", "no-apps message");
     fresh();
     eq(document.querySelectorAll("#chips .empty").length, 0, "no message with apps");
+  });
+
+  test("B2: no filter input in the tray", () => {
+    fresh();
+    eq(document.getElementById("filter"), null, "no #filter");
+  });
+
+  test("I: occupied chip shows app icon from trisplit-icon scheme (window suffix stripped)", () => {
+    fresh();
+    const ic = slotOf("LC49G95T", 1).querySelector(".chip img.ic");
+    assert(ic, "icon img");
+    eq(ic.getAttribute("src"), "trisplit-icon://app/Code", "icon src for Code#2");
+  });
+
+  test("I2: icon load error swaps in the initial fallback", () => {
+    fresh();
+    const chip = slotOf("LC49G95T", 1).querySelector(".chip");
+    chip.querySelector("img.ic").onerror();
+    eq(chip.querySelector("img.ic"), null, "img removed");
+    eq(chip.querySelector(".ic.fallback").textContent, "C", "fallback initial");
+  });
+
+  test("I3: ✕ is an svg cross and still clears the slot", () => {
+    fresh();
+    const x = slotOf("LC49G95T", 1).querySelector(".chip .x");
+    assert(x.querySelector("svg"), "svg inside ✕");
+    eq(x.getAttribute("aria-label"), "Quitar", "aria-label");
+    x.onclick({ stopPropagation() {} });
+    assert(!slotOf("LC49G95T", 1).querySelector(".chip"), "slot cleared");
   });
 
   test("C: banner reports disconnected monitors of the config", () => {
