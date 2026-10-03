@@ -23,7 +23,8 @@ gh release view "v$VER" --repo "$REPO" >/dev/null 2>&1 && { echo "error: release
 # Never ship an ad-hoc build: the Accessibility permission would reset on every update.
 unset TRISPLIT_SIGN_ID TRISPLIT_KEYCHAIN
 ./build.sh
-codesign -dv --verbose=2 Trisplit.app 2>&1 | grep -q '^Authority=trisplit dev$' \
+SIGINFO="$(codesign -dv --verbose=2 Trisplit.app 2>&1)"
+grep -q '^Authority=trisplit dev$' <<<"$SIGINFO" \
     || { echo "error: build is not signed with the 'trisplit dev' identity (run 'make cert')" >&2; exit 1; }
 BUILT="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Trisplit.app/Contents/Info.plist)"
 [ "$BUILT" = "$VER" ] || { echo "error: bundle version $BUILT != VERSION $VER" >&2; exit 1; }
