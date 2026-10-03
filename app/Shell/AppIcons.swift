@@ -39,7 +39,9 @@ final class AppIconSchemeHandler: NSObject, WKURLSchemeHandler {
         for n in names {
             for d in dirs {
                 let p = d + "/" + n + ".app"
-                if FileManager.default.fileExists(atPath: p) { return NSWorkspace.shared.icon(forFile: p) }
+                if FileManager.default.fileExists(atPath: p) {
+                    return NSWorkspace.shared.icon(forFile: URL(fileURLWithPath: p).resolvingSymlinksInPath().path)
+                }
             }
         }
         return nil
