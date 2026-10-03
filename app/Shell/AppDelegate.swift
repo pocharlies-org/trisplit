@@ -39,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel = PanelController(engine: engine)
         engine.onPush = { [weak self] js in self?.panel.evaluate(js) }
         engine.onHidePanel = { [weak self] in self?.panel.hide() }
+        engine.onRaisePanel = { [weak self] in self?.panel.bringToFront() }
         engine.onHUD = { [weak self] msg in self?.hud.show(msg) }
 
         status = StatusMenu(engine: engine, openPanel: { [weak self] in self?.openPanel() },

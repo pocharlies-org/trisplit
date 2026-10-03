@@ -18,6 +18,7 @@ final class Engine: @unchecked Sendable {
     /// native -> panel JS (`window.trisplitSetState(...)`).
     var onPush: ((String) -> Void)?
     var onHidePanel: (() -> Void)?
+    var onRaisePanel: (() -> Void)?
     var onHUD: ((String) -> Void)?
     var onStateChanged: (() -> Void)?
     var log: (String) -> Void = Engine.defaultLog
@@ -167,7 +168,8 @@ final class Engine: @unchecked Sendable {
     // MARK: - Actions
 
     /// Lua applyConfig().
-    func applyConfig(completion: ((Bool) -> Void)? = nil) {
+    /// `keepPanelOnTop`: the panel is open (Aplicar): re-activate Trisplit after raising the windows.
+    func applyConfig(keepPanelOnTop: Bool = false, completion: ((Bool) -> Void)? = nil) {
         guard let cfg = state.activeConfig else { completion?(false); return }
         if screenLocked() {
             log(HUD_LOCKED)
@@ -198,6 +200,8 @@ final class Engine: @unchecked Sendable {
             let targets = resolved.map { $0.win }
             var ok = true
             var placed = Set<CGWindowID>()
+            var order: [CGWindowID] = []   // placed windows in slot order, for the raise phase
+            let focusedBefore = focusedWindow()?.id
             for (i, (app, f)) in jobs.enumerated() {
                 guard winners.contains(i) else {
                     axLog("ya colocada en otro slot, omitida: \(app)")
@@ -206,15 +210,40 @@ final class Engine: @unchecked Sendable {
                 if let w = targets[i], w.id != 0, !placed.contains(w.id) {
                     placeWindowLogged(w, f)
                     placed.insert(w.id)
-                } else if !placeApp(app, f, placed: &placed) {
-                    ok = false
+                    order.append(w.id)
+                } else {
+                    let before = placed
+                    if !placeApp(app, f, placed: &placed) { ok = false }
+                    order.append(contentsOf: placed.subtracting(before))
                 }
             }
+            raisePlaced(order, previouslyFocused: focusedBefore)
             return ok
         }, then: { [self] ok in
+            if keepPanelOnTop { onRaisePanel?() }
             log("applyConfig end jobs=\(jobs.count) ok=\(ok)")
             completion?(ok)
         })
+    }
+
+    /// Brings the placed windows above other apps' windows (applyConfig only moves/resizes).
+    /// Raises in slot order with a short gap so WindowServer applies each activation; the final
+    /// focus (see raiseOrder) goes last. AX queue only.
+    private func raisePlaced(_ order: [CGWindowID], previouslyFocused: CGWindowID?) {
+        let seq = raiseOrder(placed: order, previouslyFocused: previouslyFocused)
+        guard !seq.isEmpty else { return }
+        var byID: [CGWindowID: AXWindow] = [:]
+        for a in runningApps() where a.activationPolicy == .regular {
+            for w in slotWindows(pid: a.processIdentifier) where w.id != 0 { byID[w.id] = w }
+        }
+        for id in seq {
+            guard let w = byID[id] else { continue }
+            let name = NSRunningApplication(processIdentifier: w.pid)?.localizedName ?? "pid \(w.pid)"
+            focusWindow(w)
+            axLog("raise \(name) id=\(id)")
+            usleep(40_000)
+        }
+        axLog("foco final id=\(seq.last!)")
     }
 
     /// Lua cycle hotkey.
@@ -449,10 +478,12 @@ final class Engine: @unchecked Sendable {
                 }
             })
         case "apply":
-            applyConfig(completion: nil)
+            applyConfig(keepPanelOnTop: true, completion: nil)
         case "applyAndClose":
-            applyConfig(completion: nil)
+            // Hide first: closing the panel makes macOS reactivate the previous app, which
+            // must not happen after the raise phase.
             onHidePanel?()
+            applyConfig(completion: nil)
         case "close":
             onHidePanel?()
         case "openAXSettings":

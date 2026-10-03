@@ -277,6 +277,13 @@ func matchTests() {
         eq(pickWindow(order.map { ids[$0] }, idx: 2), 133407, "Code#2 = next id")
         eq(slotOrder(ids: [5, 5, 3]), [2, 0, 1], "ties keep input order")
     }
+    test("raiseOrder: focused-before goes last, else slot 1") {
+        eq(raiseOrder(placed: [1, 2, 3], previouslyFocused: nil), [2, 3, 1], "slot 1 focused by default")
+        eq(raiseOrder(placed: [1, 2, 3], previouslyFocused: 2), [1, 3, 2], "previous focus kept on top")
+        eq(raiseOrder(placed: [1, 2, 3], previouslyFocused: 9), [2, 3, 1], "unplaced focus ignored")
+        eq(raiseOrder(placed: [4, 0, 4, 5], previouslyFocused: nil), [5, 4], "dedupe, id 0 dropped")
+        eq(raiseOrder(placed: [], previouslyFocused: 1), [], "nothing placed")
+    }
     test("sortApps") {
         let apps = ["slack", "Code", "Arc", "code"].map { PanelApp(name: $0, count: 1, titles: []) }
         eq(sortApps(apps).map(\.name), ["Arc", "Code", "code", "slack"])
