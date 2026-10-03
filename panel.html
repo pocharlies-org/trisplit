@@ -40,7 +40,38 @@
   body { margin: 0; background: Canvas; color: CanvasText; height: 100vh; display: flex; flex-direction: column; font-size: var(--f-md); letter-spacing: -0.01em; }
 
   #bar { display: flex; gap: var(--sp-2); align-items: center; padding: var(--sp-3) var(--sp-4); user-select: none; }
-  #bar select { font-size: var(--f-md); padding: var(--sp-1) var(--sp-2); border: 1px solid var(--hair); border-radius: var(--r-sm); background: Field; color: FieldText; }
+  #bar > button, #bar > input { flex: none; }
+  #profiles {
+    display: flex; gap: 2px; padding: 2px; border-radius: var(--r-sm); background: var(--fill-thick);
+    overflow-x: auto; flex: 0 1 auto; min-width: 0; scrollbar-width: none;
+  }
+  #profiles::-webkit-scrollbar { display: none; }
+  button.tab {
+    flex: none; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    padding: 3px 12px; border: 0; border-radius: calc(var(--r-sm) - 2px); background: transparent; box-shadow: none;
+    color: color-mix(in srgb, CanvasText 75%, transparent);
+  }
+  button.tab:hover { background: color-mix(in srgb, CanvasText 6%, transparent); }
+  button.tab:active { transform: none; }
+  button.tab[aria-selected="true"] { background: Canvas; color: CanvasText; font-weight: 600; box-shadow: var(--shadow-sm); }
+  button.tab.dragging { opacity: .4; }
+  button.tab.over { box-shadow: inset 2px 0 0 AccentColor; }
+  button.tab:focus-visible { outline-offset: -2px; }
+  input.tab-edit {
+    flex: none; width: 140px; font-size: var(--f-md); padding: 2px 8px; border: 1px solid AccentColor;
+    border-radius: calc(var(--r-sm) - 2px); background: Field; color: FieldText;
+  }
+  input.tab-edit.invalid { border-color: var(--danger); outline: 2px solid color-mix(in srgb, var(--danger) 35%, transparent); }
+  #profmenu {
+    position: fixed; z-index: 50; min-width: 190px; padding: 4px; border-radius: var(--r-md);
+    background: Canvas; border: 1px solid var(--hair); box-shadow: var(--shadow-pop);
+  }
+  #profmenu[hidden] { display: none; }
+  #profmenu button { display: block; width: 100%; text-align: left; border: 0; box-shadow: none; background: transparent; padding: 5px 10px; border-radius: var(--r-xs); }
+  #profmenu button:hover:not(:disabled), #profmenu button:focus-visible { background: AccentColor; color: AccentColorText; outline: none; }
+  #profmenu button:disabled { opacity: .4; cursor: default; }
+  #profmenu button.danger-confirm { background: var(--danger); color: #fff; }
+  #profmenu hr { border: 0; border-top: 1px solid var(--hair); margin: 4px 0; }
   button {
     font-size: var(--f-md); padding: var(--sp-1) var(--sp-3); border-radius: var(--r-sm);
     background: ButtonFace; color: ButtonText;
@@ -167,14 +198,10 @@
 </head>
 <body>
   <div id="bar">
-    <select id="cfg"></select>
-    <button id="new" class="icon" title="Nueva configuración"><span style="font-size:15px;line-height:1">+</span></button>
+    <div id="profiles" role="tablist" aria-label="Perfiles"></div>
+    <button id="new" class="icon" title="Nuevo perfil"><span style="font-size:15px;line-height:1">+</span></button>
     <input id="newname" placeholder="Nombre…" />
-    <button id="del" class="icon" title="Eliminar configuración">
-      <svg width="12" height="14" viewBox="0 0 12 14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round">
-        <path d="M1 3h10M4.5 3V1.5h3V3M2.5 3l.6 9.4h5.8L9.5 3M5 5.5v4.5M7 5.5v4.5"/>
-      </svg>
-    </button>
+    <button id="profMenuBtn" class="icon" title="Más acciones del perfil" aria-label="Más acciones del perfil" aria-haspopup="menu" aria-expanded="false"><span style="font-size:15px;line-height:1">⋯</span></button>
     <button id="apply" class="primary" title="Aplicar configuración (⌘↩ aplica y cierra)">Aplicar</button>
     <button id="applyClose" title="Aplicar y cerrar (⌘↩)">Aplicar y cerrar</button>
     <span class="hint">
@@ -202,6 +229,7 @@
   <div id="tray">
     <div id="chips"></div>
   </div>
+<div id="profmenu" role="menu" hidden></div>
 <script>
 let S = null;
 let W = null;
@@ -214,7 +242,6 @@ let chipDragStart = 0;
 let pendingState = null;
 // A drag older than this is stale (dragend never reached us): stop parking pushes.
 const CHIP_DRAG_STALE_MS = 15000;
-let delArmed = false;
 
 // Tray/slot identity: bare "App" is the same window as "App#1".
 function specKey(a) { return /#\d+$/.test(a) ? a : a + "#1"; }
@@ -346,18 +373,7 @@ let mapScale = 1, mapMinX = 0, mapMinY = 0;
 function render() {
   if (!S || !cfg()) return;
   rebuildGroups();
-  const sel = document.getElementById("cfg");
-  sel.replaceChildren();
-  S.configs.forEach((c, i) => {
-    const o = document.createElement("option");
-    o.textContent = c.name; o.value = i;
-    sel.appendChild(o);
-  });
-  sel.value = S.active - 1;
-
-  const del = document.getElementById("del");
-  del.disabled = S.configs.length <= 1;
-  if (!delArmed) del.title = del.disabled ? "No se puede eliminar la única configuración" : "Eliminar configuración";
+  renderProfiles();
 
   const banner = document.getElementById("banner");
   const hasArr = Object.keys(arrange()).length > 0;
@@ -544,11 +560,12 @@ function render() {
         };
         slot.appendChild(chip);
       }
-      slot.ondragover = (e) => { e.preventDefault(); slot.classList.add("over"); };
+      slot.ondragover = (e) => { if (e.dataTransfer && e.dataTransfer.types && [...e.dataTransfer.types].includes(PROFILE_DT)) return; e.preventDefault(); slot.classList.add("over"); };
       slot.ondragleave = () => slot.classList.remove("over");
       slot.ondrop = (e) => {
         e.preventDefault();
         slot.classList.remove("over");
+        if (e.dataTransfer.types && [...e.dataTransfer.types].includes(PROFILE_DT)) return; // a profile tab, not an app
         document.body.classList.remove("is-dragging");
         // Fold in any state parked during the drag first, then apply the user's move on top.
         chipDragging = false;
@@ -781,7 +798,251 @@ function renderChips() {
   }
 }
 
-document.getElementById("cfg").onchange = (e) => { S.active = +e.target.value + 1; W = null; post({ action: "save", configs: S.configs, active: S.active }); render(); };
+// ---- Profiles (tab strip, rename, duplicate, reorder, menu) ----
+const PROFILE_DT = "application/x-trisplit-profile";
+const profilesEl = document.getElementById("profiles");
+const profMenu = document.getElementById("profmenu");
+const profMenuBtn = document.getElementById("profMenuBtn");
+let editing = null;      // { i } while a tab is replaced by its rename input
+let menuOpen = false;
+let profDragging = false;
+let delTimer = null;
+const profileBusy = () => !!editing || menuOpen || profDragging;
+
+function saveConfigs() { post({ action: "save", configs: S.configs, active: S.active }); }
+function tabEls() { return [...profilesEl.querySelectorAll("button.tab")]; }
+
+// Leaves a busy state (rename/menu/drag). `changed`: a save was posted, so any parked push
+// is older than our edit and the engine will push again after the save: drop it.
+function endBusy(changed) {
+  if (profileBusy() || chipDragging) return;
+  const ps = pendingState; pendingState = null;
+  if (ps && !changed) { S = ps; W = null; }
+  render();
+}
+
+function renderProfiles() {
+  if (editing && profilesEl.querySelector("input.tab-edit")) return; // never destroy a live rename input
+  const hadFocus = profilesEl.contains(document.activeElement);
+  profilesEl.replaceChildren();
+  S.configs.forEach((c, i) => {
+    const t = document.createElement("button");
+    const on = i === S.active - 1;
+    t.className = "tab"; t.setAttribute("role", "tab");
+    t.setAttribute("aria-selected", on ? "true" : "false");
+    t.tabIndex = on ? 0 : -1;
+    t.textContent = c.name; t.title = c.name;
+    t.draggable = true;
+    t.onclick = () => activateProfile(i);
+    t.ondblclick = () => startRename(i);
+    t.oncontextmenu = (e) => { e.preventDefault(); if (i !== S.active - 1) activateProfile(i); openMenu(e.clientX, e.clientY); };
+    t.onkeydown = (e) => onTabKey(e, i);
+    t.ondragstart = (e) => {
+      e.dataTransfer.setData(PROFILE_DT, String(i));
+      e.dataTransfer.effectAllowed = "move";
+      profDragging = true;
+      setTimeout(() => t.classList.add("dragging"), 0);
+    };
+    t.ondragover = (e) => {
+      const ty = e.dataTransfer && e.dataTransfer.types;
+      if (ty && !ty.includes(PROFILE_DT)) return;
+      e.preventDefault(); t.classList.add("over");
+    };
+    t.ondragleave = () => t.classList.remove("over");
+    t.ondrop = (e) => {
+      e.preventDefault(); e.stopPropagation();
+      t.classList.remove("over");
+      const from = parseInt(e.dataTransfer.getData(PROFILE_DT), 10);
+      profDragging = false;
+      if (Number.isInteger(from) && from >= 0 && from < S.configs.length && from !== i) moveProfile(from, i);
+      else endBusy(false);
+    };
+    t.ondragend = () => { t.classList.remove("dragging"); if (profDragging) { profDragging = false; endBusy(false); } };
+    profilesEl.appendChild(t);
+  });
+  const act = tabEls()[S.active - 1];
+  if (act) { if (hadFocus) act.focus(); act.scrollIntoView({ block: "nearest", inline: "nearest" }); }
+}
+
+function activateProfile(i) {
+  if (i === S.active - 1) return;
+  S.active = i + 1; W = null;
+  saveConfigs();
+  render();
+}
+
+function moveProfile(from, to) {
+  to = Math.max(0, Math.min(S.configs.length - 1, to));
+  if (from === to) { endBusy(false); return; }
+  const act = S.configs[S.active - 1];
+  const [c] = S.configs.splice(from, 1);
+  S.configs.splice(to, 0, c);
+  S.active = S.configs.indexOf(act) + 1; // the active profile stays active wherever it lands
+  W = null;
+  saveConfigs();
+  endBusy(true);
+}
+
+function onTabKey(e, i) {
+  const n = S.configs.length;
+  if (e.altKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+    e.preventDefault();
+    const to = i + (e.key === "ArrowLeft" ? -1 : 1);
+    if (to < 0 || to >= n) return;
+    moveProfile(i, to);
+    const t = tabEls()[to]; if (t) t.focus();
+    return;
+  }
+  if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+    e.preventDefault();
+    const t = tabEls()[(i + (e.key === "ArrowLeft" ? -1 : 1) + n) % n];
+    if (t) { t.tabIndex = 0; t.focus(); }
+    return;
+  }
+  if (e.key === "F2" || (e.key === "Enter" && i === S.active - 1)) { e.preventDefault(); startRename(i); return; }
+  if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    activateProfile(i);
+    const t = tabEls()[i]; if (t) t.focus();
+  }
+}
+
+// ---- rename ----
+function nameError(v, i) {
+  if (!v) return "El nombre no puede estar vacío";
+  if (S.configs.some((c, k) => k !== i && c.name.toLowerCase() === v.toLowerCase())) return "Ya existe un perfil con ese nombre";
+  return "";
+}
+function startRename(i) {
+  if (editing || !S.configs[i]) return;
+  closeMenu(false);
+  const t = tabEls()[i];
+  if (!t) return;
+  editing = { i };
+  const inp = document.createElement("input");
+  inp.className = "tab-edit"; inp.value = S.configs[i].name;
+  inp.setAttribute("aria-label", "Nombre del perfil");
+  inp.oninput = () => { inp.classList.remove("invalid"); inp.title = ""; };
+  inp.onkeydown = (e) => {
+    if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); commitRename(inp, true); }
+    else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cancelRename(); }
+  };
+  inp.onblur = () => commitRename(inp, false);
+  t.replaceWith(inp);
+  inp.focus(); inp.select();
+}
+function commitRename(inp, stayIfInvalid) {
+  if (!editing) return;
+  const i = editing.i;
+  const v = inp.value.trim();
+  const err = v === S.configs[i].name ? "" : nameError(v, i);
+  if (err) {
+    if (stayIfInvalid) { inp.classList.add("invalid"); inp.title = err; return; }
+    cancelRename(); return;
+  }
+  editing = null;
+  const changed = v !== S.configs[i].name;
+  if (changed) { S.configs[i].name = v; saveConfigs(); }
+  endBusy(changed);
+  const t = tabEls()[i]; if (t) t.focus();
+}
+function cancelRename() {
+  if (!editing) return;
+  const i = editing.i;
+  editing = null;
+  endBusy(false);
+  const t = tabEls()[i]; if (t) t.focus();
+}
+
+// ---- duplicate ----
+function duplicateActive() {
+  closeMenu(false);
+  const src = cfg();
+  const copy = JSON.parse(JSON.stringify(src));
+  const taken = (n) => S.configs.some((c) => c.name.toLowerCase() === n.toLowerCase());
+  let name = src.name + " copia", k = 2;
+  while (taken(name)) name = src.name + " copia " + k++;
+  copy.name = name;
+  S.configs.splice(S.active, 0, copy);
+  S.active += 1; W = null;
+  saveConfigs();
+  endBusy(true);
+  startRename(S.active - 1);
+}
+
+// ---- menu ----
+let delArmed2 = false;
+function openMenu(x, y) {
+  if (menuOpen) closeMenu(false);
+  const i = S.active - 1, n = S.configs.length;
+  const items = [
+    ["Renombrar", false, () => startRename(S.active - 1)],
+    ["Duplicar", false, duplicateActive],
+    ["Mover a la izquierda", i === 0, () => { closeMenu(false); moveProfile(i, i - 1); }],
+    ["Mover a la derecha", i >= n - 1, () => { closeMenu(false); moveProfile(i, i + 1); }],
+    "-",
+    ["Eliminar", n <= 1, null],
+  ];
+  profMenu.replaceChildren();
+  for (const it of items) {
+    if (it === "-") { profMenu.appendChild(document.createElement("hr")); continue; }
+    const b = document.createElement("button");
+    b.setAttribute("role", "menuitem"); b.textContent = it[0]; b.disabled = it[1];
+    if (it[0] === "Eliminar") {
+      b.className = "del-item";
+      b.title = it[1] ? "No se puede eliminar el único perfil" : "";
+      b.onclick = () => {
+        if (b.disabled) return;
+        if (!delArmed2) {
+          delArmed2 = true; b.classList.add("danger-confirm");
+          b.textContent = "¿Seguro? Pulsa de nuevo";
+          b.title = 'Pulsa de nuevo para eliminar "' + cfg().name + '"';
+          delTimer = setTimeout(disarmDel, 2500);
+          return;
+        }
+        disarmDel();
+        S.configs.splice(S.active - 1, 1);
+        S.active = Math.min(S.active, S.configs.length);
+        W = null;
+        saveConfigs();
+        closeMenu(true);
+      };
+    } else b.onclick = it[2];
+    profMenu.appendChild(b);
+  }
+  profMenu.hidden = false;
+  const r = profMenu.getBoundingClientRect();
+  const bx = profMenuBtn.getBoundingClientRect();
+  const px = x == null ? bx.left : x, py = y == null ? bx.bottom + 4 : y;
+  profMenu.style.left = Math.max(4, Math.min(px, window.innerWidth - r.width - 4)) + "px";
+  profMenu.style.top = Math.max(4, Math.min(py, window.innerHeight - r.height - 4)) + "px";
+  menuOpen = true;
+  profMenuBtn.setAttribute("aria-expanded", "true");
+  const first = profMenu.querySelector("button:not(:disabled)"); if (first) first.focus();
+}
+function disarmDel() { clearTimeout(delTimer); delTimer = null; delArmed2 = false; }
+function closeMenu(changed) {
+  if (!menuOpen) return;
+  disarmDel();
+  menuOpen = false;
+  profMenu.hidden = true; profMenu.replaceChildren();
+  profMenuBtn.setAttribute("aria-expanded", "false");
+  endBusy(changed);
+}
+profMenuBtn.onclick = () => { if (menuOpen) closeMenu(false); else openMenu(null, null); };
+profMenu.onkeydown = (e) => {
+  const bs = [...profMenu.querySelectorAll("button:not(:disabled)")];
+  const k = bs.indexOf(document.activeElement);
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    bs[(k + (e.key === "ArrowDown" ? 1 : -1) + bs.length) % bs.length].focus();
+  }
+};
+document.addEventListener("pointerdown", (e) => {
+  if (menuOpen && !profMenu.contains(e.target) && e.target !== profMenuBtn && !profMenuBtn.contains(e.target)) closeMenu(false);
+}, true);
+
+// ---- new profile (name typed inline) ----
 const newBtn = document.getElementById("new");
 const newName = document.getElementById("newname");
 newBtn.onclick = () => { newName.style.display = "inline-block"; newName.value = ""; newName.focus(); };
@@ -792,39 +1053,13 @@ newName.onkeydown = (e) => {
     S.configs.push({ name: newName.value.trim(), monitors });
     S.active = S.configs.length;
     W = null;
-    post({ action: "save", configs: S.configs, active: S.active });
+    saveConfigs();
     newName.style.display = "none";
     render();
   }
   if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cancelNewName(); }
 };
 function cancelNewName() { newName.value = ""; newName.style.display = "none"; newName.blur(); }
-const delBtn = document.getElementById("del");
-const delIcon = [...delBtn.childNodes];
-let delTimer = null;
-function disarmDel() {
-  clearTimeout(delTimer); delTimer = null;
-  delArmed = false; delBtn.classList.remove("danger-confirm");
-  delBtn.replaceChildren(...delIcon);
-  delBtn.title = delBtn.disabled ? "No se puede eliminar la única configuración" : "Eliminar configuración";
-}
-delBtn.onclick = () => {
-  if (S.configs.length <= 1) return;
-  if (!delArmed) {
-    delArmed = true;
-    delBtn.classList.add("danger-confirm");
-    delBtn.title = 'Pulsa de nuevo para eliminar "' + cfg().name + '"';
-    delBtn.textContent = "¿Seguro?";
-    delTimer = setTimeout(disarmDel, 2500);
-    return;
-  }
-  disarmDel();
-  S.configs.splice(S.active - 1, 1);
-  S.active = Math.min(S.active, S.configs.length);
-  W = null;
-  post({ action: "save", configs: S.configs, active: S.active });
-  render();
-};
 document.getElementById("apply").onclick = () => post({ action: "apply" });
 document.getElementById("applyClose").onclick = () => post({ action: "applyAndClose" });
 document.getElementById("resetArr").onclick = () => {
@@ -840,6 +1075,7 @@ document.getElementById("openAX").onclick = () => post({ action: "openAXSettings
 document.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && e.metaKey) { e.preventDefault(); post({ action: "applyAndClose" }); return; }
   if (e.key !== "Escape") return;
+  if (menuOpen) { e.preventDefault(); closeMenu(false); profMenuBtn.focus(); return; }
   const t = document.activeElement;
   if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) {
     e.preventDefault();
@@ -884,7 +1120,7 @@ window.trisplitSetState = (s) => {
   if (chipDragging && Date.now() - chipDragStart > CHIP_DRAG_STALE_MS) {
     chipDragging = false; pendingState = null; document.body.classList.remove("is-dragging");
   }
-  if (chipDragging) { pendingState = s; return; }
+  if (chipDragging || profileBusy()) { pendingState = s; return; }
   if (arrDrag) arrDrag(true);
   S = s; W = null; render();
 };

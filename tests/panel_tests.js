@@ -80,16 +80,16 @@
     window.trisplitSetState({});
     window.trisplitSetState({ configs: [], active: 1 });
     window.trisplitSetState({ configs: [{ name: "Solo" }], active: 5, screens: [{ name: "X", x: 0, y: 0, w: 10, h: 10 }] });
-    eq(document.getElementById("cfg").options[0].textContent, "Solo", "renders config lacking monitors");
-    eq(document.getElementById("cfg").value, "0", "out-of-range active clamped");
+    eq(document.querySelector("#profiles .tab").textContent, "Solo", "renders config lacking monitors");
+    eq(document.querySelector("#profiles .tab").getAttribute("aria-selected"), "true", "out-of-range active clamped");
     fresh();
   });
 
   test("renders configs", () => {
     fresh((s) => s.configs.push({ name: "Casa", monitors: {} }));
-    const opts = [...document.querySelectorAll("#cfg option")].map((o) => o.textContent);
-    eq(JSON.stringify(opts), JSON.stringify(["Trabajo <b>x</b>", "Casa"]), "option texts");
-    eq(document.querySelectorAll("#cfg b").length, 0, "no <b> element from config name");
+    const opts = [...document.querySelectorAll("#profiles .tab")].map((o) => o.textContent);
+    eq(JSON.stringify(opts), JSON.stringify(["Trabajo <b>x</b>", "Casa"]), "tab texts");
+    eq(document.querySelectorAll("#profiles b").length, 0, "no <b> element from config name");
   });
 
   test("renders screens with U+200E names intact", () => {
@@ -186,19 +186,219 @@
     eq(byAction("close").length, 1, "close after edit cancelled");
   });
 
-  test("delete disabled with one config, enabled with two", () => {
+  // ---- profiles ----
+  const ptabs = () => [...document.querySelectorAll("#profiles .tab")];
+  const pnames = () => ptabs().map((t) => t.textContent);
+  const withProfiles = (names) => fresh((s) => { names.forEach((n) => s.configs.push({ name: n, monitors: JSON.parse(JSON.stringify(s.configs[0].monitors)) })); });
+  const tkey = (el, key, o) => el.dispatchEvent(new KeyboardEvent("keydown", Object.assign({ key, bubbles: true, cancelable: true }, o || {})));
+  const menuItem = (label) => [...document.querySelectorAll("#profmenu button")].find((b) => b.textContent.startsWith(label));
+  const openMenu = () => document.getElementById("profMenuBtn").click();
+  const dt = () => { const d = {}; return { types: [], setData(k, v) { d[k] = v; this.types.push(k); }, getData(k) { return d[k] || ""; } }; };
+  const lastSave = () => byAction("save")[byAction("save").length - 1];
+
+  test("P: one tab per profile, active one selected, roving tabindex", () => {
+    withProfiles(["Casa", "Viaje"]);
+    eq(ptabs().length, 3, "tabs");
+    eq(ptabs().map((t) => t.getAttribute("aria-selected")).join(), "true,false,false", "selected");
+    eq(ptabs().map((t) => t.tabIndex).join(), "0,-1,-1", "tabindex");
+    eq(document.getElementById("profiles").getAttribute("role"), "tablist", "role");
+    eq(ptabs()[0].getAttribute("role"), "tab", "tab role");
+    eq(document.querySelector("#cfg"), null, "old select gone");
+  });
+
+  test("P: click switches profile and saves", () => {
+    withProfiles(["Casa"]);
+    ptabs()[1].click();
+    eq(ptabs()[1].getAttribute("aria-selected"), "true", "now selected");
+    eq(lastSave().active, 2, "saved active");
+    const n = byAction("save").length;
+    ptabs()[1].click();
+    eq(byAction("save").length, n, "clicking the active tab saves nothing");
+  });
+
+  test("P: arrows move focus, Enter/Space activate", () => {
+    withProfiles(["Casa", "Viaje"]);
+    ptabs()[0].focus();
+    tkey(ptabs()[0], "ArrowRight");
+    assert(document.activeElement === ptabs()[1], "focus moved right");
+    tkey(ptabs()[1], "Enter");
+    eq(ptabs()[1].getAttribute("aria-selected"), "true", "Enter activates");
+    tkey(ptabs()[2], " ");
+    eq(ptabs()[2].getAttribute("aria-selected"), "true", "Space activates");
+    assert(document.activeElement === ptabs()[2], "focus stays on active tab");
+  });
+
+  test("P: rename via dblclick commits on Enter (trimmed)", () => {
+    withProfiles(["Casa"]);
+    ptabs()[0].ondblclick();
+    const inp = document.querySelector("#profiles input.tab-edit");
+    assert(inp && document.activeElement === inp, "input focused");
+    inp.value = "  Oficina  ";
+    tkey(inp, "Enter");
+    eq(document.querySelector("#profiles input"), null, "input gone");
+    eq(pnames().join("|"), "Oficina|Casa", "renamed");
+    eq(lastSave().configs[0].name, "Oficina", "saved");
+  });
+
+  test("P: rename via F2 and Enter on the active tab; blur commits", () => {
+    withProfiles(["Casa"]);
+    tkey(ptabs()[0], "F2");
+    let inp = document.querySelector("#profiles input.tab-edit");
+    assert(inp, "F2 opens input");
+    inp.value = "Uno"; inp.onblur();
+    eq(pnames()[0], "Uno", "blur commits");
+    tkey(ptabs()[0], "Enter");
+    assert(document.querySelector("#profiles input.tab-edit"), "Enter on active opens input");
+  });
+
+  test("P: rename Esc cancels, nothing saved, no window close", () => {
+    withProfiles(["Casa"]);
+    ptabs()[0].ondblclick();
+    const inp = document.querySelector("#profiles input.tab-edit");
+    inp.value = "Otro";
+    esc(inp);
+    eq(document.querySelector("#profiles input"), null, "input gone");
+    eq(pnames()[0], "Trabajo <b>x</b>", "unchanged");
+    eq(byAction("save").length, 0, "no save");
+    eq(byAction("close").length, 0, "no close");
+  });
+
+  test("P: rename rejects empty and duplicate names (red outline, tooltip, no save)", () => {
+    withProfiles(["Casa"]);
+    ptabs()[1].ondblclick();
+    const inp = document.querySelector("#profiles input.tab-edit");
+    inp.value = "   "; tkey(inp, "Enter");
+    assert(inp.classList.contains("invalid") && inp.title.length > 0, "empty flagged");
+    assert(document.querySelector("#profiles input.tab-edit"), "still editing");
+    inp.value = "trabajo <B>X</b>"; tkey(inp, "Enter");
+    assert(inp.classList.contains("invalid"), "duplicate (case-insensitive) flagged");
+    eq(byAction("save").length, 0, "nothing saved");
+    inp.value = "Casa"; tkey(inp, "Enter");
+    eq(byAction("save").length, 0, "same own name = no-op, no save");
+    eq(document.querySelector("#profiles input"), null, "editing ended");
+  });
+
+  test("P: duplicate details", () => {
+    fresh((s) => { s.configs[0].name = "Dev"; s.configs.push({ name: "Dev copia", monitors: {} }); });
+    openMenu(); menuItem("Duplicar").click();
+    const sv = lastSave();
+    eq(sv.configs.map((c) => c.name).join("|"), "Dev|Dev copia 2|Dev copia", "named copia 2 and inserted right after");
+    eq(sv.active, 2, "copy is active");
+    const inp = document.querySelector("#profiles input.tab-edit");
+    assert(inp && inp.value === "Dev copia 2", "rename mode on the copy");
+    eq(JSON.stringify(sv.configs[1].monitors), JSON.stringify(sv.configs[0].monitors), "same monitors incl. spans");
+    inp.onblur();
+    // edit the copy's slots: the original must not change
+    const before = JSON.stringify(lastSave().configs[0].monitors);
+    slotOf("LC49G95T", 3).querySelector(".x").onclick({ stopPropagation() {} });
+    const after = lastSave();
+    eq(JSON.stringify(after.configs[0].monitors), before, "original untouched");
+    assert(JSON.stringify(after.configs[1].monitors) !== before, "copy changed");
+  });
+
+  test("P: reorder by drag and drop keeps the active profile active", () => {
+    withProfiles(["Casa", "Viaje"]);
+    ptabs()[1].click(); // active = Casa (index 1)
+    const d = dt();
+    ptabs()[1].ondragstart({ dataTransfer: d });
+    ptabs()[0].ondrop({ preventDefault() {}, stopPropagation() {}, dataTransfer: d });
+    eq(lastSave().configs.map((c) => c.name).join("|"), "Casa|Trabajo <b>x</b>|Viaje", "order");
+    eq(lastSave().active, 1, "active follows Casa");
+    eq(ptabs()[0].getAttribute("aria-selected"), "true", "UI selected");
+  });
+
+  test("P: reorder with alt+arrows keeps the active profile", () => {
+    withProfiles(["Casa", "Viaje"]);
+    tkey(ptabs()[0], "ArrowRight", { altKey: true });
+    eq(lastSave().configs.map((c) => c.name).join("|"), "Casa|Trabajo <b>x</b>|Viaje", "moved right");
+    eq(lastSave().active, 2, "active still Trabajo");
+    tkey(ptabs()[1], "ArrowLeft", { altKey: true });
+    eq(lastSave().configs[0].name, "Trabajo <b>x</b>", "moved back");
+    eq(lastSave().active, 1, "active follows");
+    const n = byAction("save").length;
+    tkey(ptabs()[0], "ArrowLeft", { altKey: true });
+    eq(byAction("save").length, n, "no move past the start");
+  });
+
+  test("P: profile drag is ignored by slots, app drag ignored by tabs", () => {
+    withProfiles(["Casa"]);
+    const d = dt();
+    ptabs()[1].ondragstart({ dataTransfer: d });
+    let before = JSON.stringify(document.querySelector('.slot').outerHTML + document.querySelectorAll('.slot').length);
+    slotOf("LC49G95T", 2).ondrop({ preventDefault() {}, dataTransfer: Object.assign(d, { types: ["application/x-trisplit-profile"] }) });
+    eq(JSON.stringify(document.querySelector('.slot').outerHTML + document.querySelectorAll('.slot').length), before, "slots untouched by a profile drop");
+    ptabs()[1].ondragend();
     fresh();
-    const del = document.getElementById("del");
-    eq(del.disabled, true, "disabled with 1");
-    assert(del.title.length > 0, "tooltip present");
-    del.click();
-    eq(log.length, 0, "no message when disabled");
-    fresh((s) => s.configs.push({ name: "Casa", monitors: {} }));
-    eq(del.disabled, false, "enabled with 2");
-    del.click(); del.click();
-    eq(byAction("save").length, 1, "delete saves");
-    eq(byAction("save")[0].configs.length, 1, "one config left");
-    eq(del.disabled, true, "disabled again");
+    const names = pnames().join("|");
+    ptabs()[0].ondrop({ preventDefault() {}, stopPropagation() {}, dataTransfer: { types: ["text/plain"], getData: () => JSON.stringify({ app: "Slack", tray: true }) } });
+    eq(pnames().join("|"), names, "tab order untouched by an app drop");
+  });
+
+  test("P: menu: move left/right, disabled at the edges", () => {
+    withProfiles(["Casa", "Viaje"]);
+    openMenu();
+    eq(menuItem("Mover a la izquierda").disabled, true, "left disabled on first");
+    eq(menuItem("Mover a la derecha").disabled, false, "right enabled");
+    menuItem("Mover a la derecha").click();
+    eq(lastSave().configs.map((c) => c.name).join("|"), "Casa|Trabajo <b>x</b>|Viaje", "moved");
+    eq(document.getElementById("profmenu").hidden, true, "menu closed");
+  });
+
+  test("P: menu: Eliminar needs 2 clicks, disabled with one profile", () => {
+    fresh();
+    openMenu();
+    eq(menuItem("Eliminar").disabled, true, "disabled with 1");
+    esc();
+    eq(document.getElementById("profmenu").hidden, true, "Esc closes the menu");
+    eq(byAction("close").length, 0, "Esc did not close the window");
+    withProfiles(["Casa"]);
+    openMenu();
+    const delItem = document.querySelector("#profmenu .del-item");
+    delItem.click();
+    eq(byAction("save").length, 0, "first click only arms");
+    delItem.click();
+    eq(lastSave().configs.length, 1, "deleted");
+    eq(ptabs().length, 1, "one tab left");
+    openMenu();
+    eq(menuItem("Eliminar").disabled, true, "disabled again");
+  });
+
+  test("P: menu closes on outside click; right-click on a tab opens it on that profile", () => {
+    withProfiles(["Casa"]);
+    openMenu();
+    document.body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    eq(document.getElementById("profmenu").hidden, true, "outside click closes");
+    ptabs()[1].oncontextmenu({ preventDefault() {}, clientX: 10, clientY: 10 });
+    eq(document.getElementById("profmenu").hidden, false, "context menu open");
+    eq(lastSave().active, 2, "right-clicked tab became active");
+  });
+
+  test("P: a push arriving mid-rename keeps the input and its typed text", () => {
+    withProfiles(["Casa"]);
+    ptabs()[0].ondblclick();
+    const inp = document.querySelector("#profiles input.tab-edit");
+    inp.value = "Escribiendo";
+    const s2 = JSON.parse(JSON.stringify(FIXTURE)); s2.configs[0].name = "DesdeMotor";
+    window.trisplitSetState(s2);
+    assert(inp.isConnected && document.querySelector("#profiles input.tab-edit") === inp, "same input survives");
+    eq(inp.value, "Escribiendo", "typed text kept");
+    inp.value = "Final"; tkey(inp, "Enter");
+    eq(pnames()[0], "Final", "commit applies on top");
+    // cancel path applies the parked push
+    ptabs()[0].ondblclick();
+    window.trisplitSetState(s2);
+    esc(document.querySelector("#profiles input.tab-edit"));
+    eq(pnames()[0], "DesdeMotor", "parked push applied after cancel");
+  });
+
+  test("P: a push while the menu is open is parked until it closes", () => {
+    withProfiles(["Casa"]);
+    openMenu();
+    const s2 = JSON.parse(JSON.stringify(FIXTURE)); s2.configs[0].name = "DesdeMotor";
+    window.trisplitSetState(s2);
+    eq(document.getElementById("profmenu").hidden, false, "menu still open");
+    esc();
+    eq(pnames()[0], "DesdeMotor", "applied after close");
   });
 
   test("arrange click without move posts nothing (no NaN)", () => {
