@@ -57,9 +57,9 @@ func ensureRunning(_ names: [String]) -> NSRunningApplication? {
 func visibleApps() -> [PanelApp] {
     var out: [PanelApp] = []
     for a in NSWorkspace.shared.runningApplications where a.activationPolicy == .regular && !a.isHidden {
-        let wins = visibleWindows(pid: a.processIdentifier)
+        let wins = slotWindows(pid: a.processIdentifier)
         guard !wins.isEmpty, let name = a.localizedName else { continue }
-        out.append(PanelApp(name: name, count: wins.count, titles: wins.map { $0.title }))
+        out.append(PanelApp(name: name, count: wins.count, titles: wins.map { $0.title }, minimized: wins.map { $0.isMinimized }))
     }
     return sortApps(out)
 }

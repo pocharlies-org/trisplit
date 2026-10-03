@@ -10,6 +10,8 @@ cd "$(dirname "$0")"
 
 APP=Trisplit.app
 BIN=Trisplit
+VERSION="$(tr -d '[:space:]' < VERSION)"
+[ -n "$VERSION" ] || { echo "error: empty VERSION file" >&2; exit 1; }
 # shellcheck source=scripts/dev-keychain.sh
 . scripts/dev-keychain.sh
 
@@ -17,7 +19,7 @@ shopt -s nullglob
 SRCS=(app/main.swift app/Core/*.swift app/Engine/*.swift app/Shell/*.swift)
 shopt -u nullglob
 
-for f in panel.html icon.png; do
+for f in panel.html icon.png VERSION; do
     [ -f "$f" ] || { echo "error: missing $f" >&2; exit 1; }
 done
 
@@ -38,7 +40,7 @@ mkdir -p "$S/Contents/MacOS" "$S/Contents/Resources"
 mv "build/$BIN" "$S/Contents/MacOS/$BIN"
 cp -X panel.html icon.png "$S/Contents/Resources/"
 
-cat >"$S/Contents/Info.plist" <<'PLIST'
+cat >"$S/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -48,8 +50,8 @@ cat >"$S/Contents/Info.plist" <<'PLIST'
   <key>CFBundleDisplayName</key><string>Trisplit</string>
   <key>CFBundleExecutable</key><string>Trisplit</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>2.0.0</string>
-  <key>CFBundleVersion</key><string>2</string>
+  <key>CFBundleShortVersionString</key><string>$VERSION</string>
+  <key>CFBundleVersion</key><string>$VERSION</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>

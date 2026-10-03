@@ -1,115 +1,127 @@
 # Trisplit
 
-Gestor de ventanas en rejilla para macOS, nativo en Swift (v2). Cada monitor tiene su
-propia rejilla `cols × rows`; las apps se asignan a huecos y se recolocan con un atajo.
-Varias configuraciones con nombre (Dev, Reunión, …), panel nativo con mapa del escritorio
-a escala real y reordenación de monitores vía [displayplacer](https://github.com/jakehilborn/displayplacer).
+Grid window manager for macOS, written in native Swift. Every monitor gets its own
+`cols × rows` grid, apps are assigned to slots, and one shortcut puts every window back
+where it belongs. Multiple named configurations (Work, Meeting, ...), a native panel with
+a to-scale map of your desk, and monitor re-arrangement through
+[displayplacer](https://github.com/jakehilborn/displayplacer).
 
-![screenshot](docs/screenshot.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/screenshot-light.png">
+  <img alt="Trisplit panel: three monitors with apps assigned to grid slots" src="docs/screenshot-light.png">
+</picture>
 
-## Instalación
+## Install
 
-Requisitos: macOS 13+, Command Line Tools (`swiftc`). Opcional: `brew install displayplacer`.
+Requires macOS 13+ on Apple silicon (arm64).
+
+### Homebrew
 
 ```bash
-make install                                   # compila y copia a ~/Applications/Trisplit.app
+brew install --cask pocharlies-org/tap/trisplit
+open -a Trisplit
+```
+
+The app is signed with a self-signed certificate and is not notarized; the cask removes the
+quarantine attribute on install. Optional: `brew install displayplacer` for monitor re-arrangement.
+
+### From source
+
+Needs the Xcode Command Line Tools (`swiftc`).
+
+```bash
+git clone https://github.com/pocharlies-org/trisplit && cd trisplit
+make cert      # optional, recommended: stable signing identity (see "Stable signing")
+make install   # builds and copies to ~/Applications/Trisplit.app
 open ~/Applications/Trisplit.app
-~/Applications/Trisplit.app/Contents/MacOS/Trisplit --login-item on   # arrancar al iniciar sesión (off|status)
 ```
 
-Concede **Accesibilidad** en Ajustes del Sistema → Privacidad y seguridad → Accesibilidad.
+On first launch grant **Accessibility**: System Settings → Privacy & Security → Accessibility.
 
-```bash
-# make cert es opcional pero recomendado (firma estable, ver "Firma estable")
-git clone https://github.com/pocharlies/trisplit && cd trisplit && make cert && make install
-```
+To start at login: `~/Applications/Trisplit.app/Contents/MacOS/Trisplit --login-item on`.
 
-## Atajos
+## Usage
 
-| Atajo | Acción |
+Trisplit lives in the menu bar. Open the panel with `⌘⌥P`, drag apps from the tray onto
+slots, then press **Apply**.
+
+| Shortcut | Action |
 |---|---|
-| `⌘⌥0` | Aplicar la configuración activa |
-| `⌘⌥⇧0` | Pasar a la siguiente configuración |
-| `⌘⌥P` | Abrir el panel |
-| `⌘⌥1…9` | Mover la ventana enfocada al hueco N (y recordarlo) |
-| `⌘⌥⇧1…9` | Enfocar la app/ventana del hueco N |
+| `⌘⌥0` | Apply the active configuration |
+| `⌘⌥⇧0` | Switch to the next configuration |
+| `⌘⌥P` | Open the panel |
+| `⌘⌥1…9` | Move the focused window to slot N (and remember it) |
+| `⌘⌥⇧1…9` | Focus the app/window in slot N |
 
-URLs: `open trisplit://apply`, `trisplit://next`, `trisplit://panel`.
+Slots are numbered across monitors from left to right (by screen position). `App#N` (for example
+`Code#2`) addresses the Nth window of an app, minimized windows included.
 
-## Huecos que ocupan varias columnas
+## Slots spanning several columns
 
-Una app puede ocupar varias columnas seguidas de la misma fila. En el panel, cada chip tiene:
+An app can take several adjacent columns of the same row. In the panel each occupied slot
+shows the buttons that apply:
 
-- **→**: ocupa también el hueco de la derecha (solo aparece si está vacío).
-- **←**: ocupa una columna menos.
+- **◀** (`⇧←`): also take the empty slot on the left.
+- **▶** (`⇧→`): also take the empty slot on the right.
+- **−** (`⇧↓`): give back one column (only if it spans more than one).
 
-En `trisplit.json` la continuación se escribe como `"<"`: `["Code", "<", "Claude"]` en 3 columnas deja Code en 2/3 y Claude en 1/3. Un `"<"` no cruza filas, y si está en la primera columna o detrás de un hueco vacío se ignora. Los atajos `⌘⌥N` cuentan solo los huecos reales (en el ejemplo, Code es el 1 y Claude el 2).
+The shortcuts work on the focused slot (Tab to focus it). When placing or widening an app,
+windows outside the grid that end up covered are minimized.
 
-## Ficheros
+In the config file a continuation is written as `"<"`: `["Code", "<", "Slack"]` on 3 columns
+gives Code 2/3 and Slack 1/3. A `"<"` never crosses rows and is ignored in the first column
+or after an empty slot. `⌘⌥N` counts real slots only (Code is 1, Slack is 2 in the example).
 
-- Estado: `~/Library/Application Support/trisplit/trisplit.json`
-  (en el primer arranque se importa una copia de `~/.hammerspoon/trisplit.json`, sin tocar el original).
+## Files
+
+- Configuration and state: `~/Library/Application Support/trisplit/trisplit.json`
 - Log: `~/Library/Logs/Trisplit/trisplit.log`
 
-## CLI
+## CLI and URL scheme
 
-| Flag | Uso |
+| Flag | Purpose |
 |---|---|
-| `--selftest` | Comprobaciones internas sin UI |
-| `--selftest-live` | Comprobaciones contra ventanas/pantallas reales (`make live`) |
-| `--login-item on\|off\|status` | Gestiona el login item (SMAppService) |
+| `--selftest` | Internal checks, no UI |
+| `--selftest-live` | Checks against real windows and screens (`make live`) |
+| `--login-item on\|off\|status` | Manage the login item (SMAppService) |
 
-`TRISPLIT_FORCE_HOTKEYS=1` registra los atajos aunque se detecte Hammerspoon v1.
+URLs: `open trisplit://apply`, `open trisplit://next`, `open trisplit://panel`.
 
-## Arquitectura
+## Stable signing
 
-```
-app/Core/     lógica pura (geometría, rejillas, estado/JSON, displayplacer, coexistencia) — testeable
-app/Engine/   motor de ventanas sobre Accessibility (AX), apps, arranque
-app/Shell/    AppKit: AppDelegate, menú de barra, atajos, HUD, ventana del panel
-app/main.swift  entrada: CLI o app de barra de menú
-panel.html    UI del panel (WKWebView), recibe estado vía window.trisplitSetState
-legacy/       v1 Hammerspoon (Lua) y sus tests, sólo para rollback
-```
+An ad-hoc signature changes on every rebuild and macOS then revokes the Accessibility
+permission. To avoid it:
 
-## Tests
+1. Once: `make cert` creates a self-signed `trisplit dev` identity in a dedicated keychain
+   (`~/Library/Application Support/trisplit-dev/`), added to your keychain search list.
+2. `make install` and `./build.sh` sign with it automatically.
+3. Grant Accessibility once more; later rebuilds keep it.
+
+`TRISPLIT_SIGN_ID` (and `TRISPLIT_KEYCHAIN`) take precedence; with no identity the build is
+signed ad-hoc with a warning. Remove everything with `make cert-uninstall`.
+
+## Development
 
 ```bash
-make unit    # Core, swiftc sin XCTest
-make panel   # panel.html en WKWebView headless
-make test    # ambos
-make live    # selftest contra el escritorio real
+make unit         # Core logic, plain swiftc (no XCTest)
+make panel        # panel.html in a headless WKWebView
+make test         # both
+make live         # self-test against the real desktop
+make screenshots  # regenerate docs/screenshot-{light,dark}.png from tests/fixtures/screenshot-state.json
+make release      # tag, GitHub release and Homebrew cask bump (needs the dev identity, a clean pushed tree)
 ```
 
-## Migración desde v1 (Hammerspoon)
+The version lives in the `VERSION` file. See [ARCHITECTURE.md](ARCHITECTURE.md) for how the
+code is organized.
 
-v1 queda en `legacy/` y en el tag `v1-hammerspoon`. Si Hammerspoon está en marcha con la
-config v1 (`init.lua` enlazado al repo, o con `hs.hotkey.bind` + "trisplit"), v2 no registra
-sus atajos para no duplicarlos. Rollback: [docs/ROLLBACK.md](docs/ROLLBACK.md).
+## Known limitations
 
-## Firma estable (make cert)
+- Only windows of the current Space are managed.
+- Monitor re-arrangement needs `displayplacer` at `/opt/homebrew/bin/displayplacer`.
+- Without a stable signing identity you must re-grant Accessibility after each rebuild.
+- The panel UI is currently in Spanish.
 
-Con firma ad-hoc cada recompilación cambia la firma y macOS retira el permiso de
-Accesibilidad. Para evitarlo:
+## License
 
-1. Una sola vez: `make cert`. Crea la identidad autofirmada `trisplit dev` en un llavero
-   propio (`~/Library/Application Support/trisplit-dev/`) y lo añade a la lista de
-   búsqueda del usuario (el llavero por defecto sigue siendo `login`). Es idempotente.
-2. `make install`: sin `TRISPLIT_SIGN_ID`, firma con `trisplit dev`.
-3. Concede **Accesibilidad** una vez más (la identidad pasa de ad-hoc a certificado).
-   Las recompilaciones siguientes conservan el permiso.
-
-`TRISPLIT_SIGN_ID` (y `TRISPLIT_KEYCHAIN`) sigue teniendo prioridad; sin identidad se
-firma ad-hoc con aviso. Desinstalar: `make cert-uninstall` (quita el llavero de la lista
-de búsqueda y lo borra junto con su directorio).
-
-## Limitaciones conocidas
-
-- Sin `make cert` (firma ad-hoc) hay que volver a conceder Accesibilidad tras cada
-  recompilación; ver [Firma estable](#firma-estable-make-cert).
-- Sólo ventanas del Space actual.
-- Reordenar monitores requiere `displayplacer` en `/opt/homebrew/bin`.
-
-## Licencia
-
-MIT — ver [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).

@@ -1,4 +1,4 @@
-.PHONY: build unit panel live test install cert cert-uninstall clean
+.PHONY: build unit panel live test install cert cert-uninstall clean screenshots release
 
 build:
 	./build.sh
@@ -26,6 +26,15 @@ cert:
 
 cert-uninstall:
 	scripts/dev-cert.sh --uninstall
+
+screenshots:
+	mkdir -p build/screenshot
+	cp scripts/screenshot.swift build/screenshot/main.swift
+	swiftc -swift-version 5 -O -framework AppKit -framework WebKit app/Core/*.swift app/Engine/*.swift app/Shell/AppIcons.swift build/screenshot/main.swift -o build/screenshot/screenshot
+	build/screenshot/screenshot panel.html tests/fixtures/screenshot-state.json docs
+
+release:
+	scripts/release.sh
 
 clean:
 	rm -rf build Trisplit.app

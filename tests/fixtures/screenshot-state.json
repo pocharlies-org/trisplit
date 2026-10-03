@@ -1,0 +1,132 @@
+{
+  "screens": [
+    {
+      "name": "Ultrawide",
+      "x": 0,
+      "y": 0,
+      "w": 5120,
+      "h": 1440
+    },
+    {
+      "name": "Built-in Retina Display",
+      "x": 1800,
+      "y": 1440,
+      "w": 1512,
+      "h": 982
+    },
+    {
+      "name": "Studio Display",
+      "x": 5120,
+      "y": 0,
+      "w": 2560,
+      "h": 1440
+    }
+  ],
+  "configs": [
+    {
+      "name": "Work",
+      "monitors": {
+        "Ultrawide": {
+          "cols": 4,
+          "rows": 1,
+          "slots": [
+            "Visual Studio Code",
+            "<",
+            "Google Chrome",
+            "Slack"
+          ]
+        },
+        "Studio Display": {
+          "cols": 2,
+          "rows": 1,
+          "slots": [
+            "Visual Studio Code#2",
+            "Safari"
+          ]
+        },
+        "Built-in Retina Display": {
+          "cols": 2,
+          "rows": 1,
+          "slots": [
+            "Terminal",
+            "Notes"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Focus",
+      "monitors": {
+        "Ultrawide": {
+          "cols": 2,
+          "rows": 1,
+          "slots": [
+            "Visual Studio Code",
+            "Terminal"
+          ]
+        }
+      }
+    }
+  ],
+  "active": 1,
+  "apps": [
+    {
+      "name": "Visual Studio Code",
+      "count": 2,
+      "titles": [
+        "main.py",
+        "README.md"
+      ],
+      "minimized": [
+        false,
+        false
+      ]
+    },
+    {
+      "name": "Google Chrome",
+      "count": 1,
+      "titles": [
+        "Documentation"
+      ]
+    },
+    {
+      "name": "Slack",
+      "count": 1,
+      "titles": [
+        ""
+      ]
+    },
+    {
+      "name": "Safari",
+      "count": 1,
+      "titles": [
+        ""
+      ]
+    },
+    {
+      "name": "Terminal",
+      "count": 1,
+      "titles": [
+        ""
+      ]
+    },
+    {
+      "name": "Notes",
+      "count": 1,
+      "titles": [
+        ""
+      ]
+    },
+    {
+      "name": "Music",
+      "count": 1,
+      "titles": [
+        ""
+      ]
+    }
+  ],
+  "primary": "Ultrawide",
+  "arrange": {},
+  "hasDisplayplacer": true,
+  "axTrusted": true
+}

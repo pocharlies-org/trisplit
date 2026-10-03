@@ -62,6 +62,16 @@ func geometryTests() {
         let fs = flatSlots(Config(name: "C", monitors: ["LC49G95T": m]), sortedScreenNames: ["LC49G95T"])
         eq(fs.map(\.idx), [1, 3], "marker skipped"); eq(fs.map(\.span), [2, 1])
     }
+    test("windowsCovered") {
+        let t = Rect(x: 0, y: 0, w: 1000, h: 500)
+        let inside = (id: UInt32(7), frame: Rect(x: 600, y: 0, w: 300, h: 500))
+        let edge = (id: UInt32(8), frame: Rect(x: 900, y: 0, w: 400, h: 500))
+        let zero = (id: UInt32(0), frame: Rect(x: 100, y: 100, w: 100, h: 100))
+        eq(windowsCovered(by: t, candidates: [inside], keep: []), [7], "center inside")
+        eq(windowsCovered(by: t, candidates: [edge], keep: []), [], "overlaps edge, center outside")
+        eq(windowsCovered(by: t, candidates: [inside], keep: [7]), [], "kept")
+        eq(windowsCovered(by: t, candidates: [zero], keep: []), [], "id 0 ignored")
+    }
     test("newMonitorGrid") {
         let g = newMonitorGrid(cols: 3, rows: 2)
         eq(g.slots.count, 6); eq(g.slots, Array(repeating: "", count: 6)); eq(g.cols, 3); eq(g.rows, 2)
@@ -257,6 +267,15 @@ func matchTests() {
         eq(bestMatch(names: ["\u{200E}"], candidates: [("", 9)]), nil, "empty normalized skipped")
         eq(bestMatch(names: ["Nope"], candidates: cands), nil)
         eq(normalizedAppName(" \u{200E}WhatsApp "), "whatsapp")
+    }
+    test("slotOrder: App#N stable when a window is minimized") {
+        // ids in AX order; minimized windows stay in the list, so indexes never renumber
+        eq(slotOrder(ids: [133407, 106732]), [1, 0])
+        let ids: [UInt32] = [133407, 106732]
+        let order = slotOrder(ids: ids)
+        eq(pickWindow(order.map { ids[$0] }, idx: 1), 106732, "Code = lowest id")
+        eq(pickWindow(order.map { ids[$0] }, idx: 2), 133407, "Code#2 = next id")
+        eq(slotOrder(ids: [5, 5, 3]), [2, 0, 1], "ties keep input order")
     }
     test("sortApps") {
         let apps = ["slack", "Code", "Arc", "code"].map { PanelApp(name: $0, count: 1, titles: []) }
