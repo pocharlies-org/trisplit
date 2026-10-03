@@ -110,6 +110,7 @@
     border: 1px solid var(--hair); box-shadow: var(--shadow-sm);
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
     cursor: grab; padding: var(--sp-1); text-align: center; position: relative;
+    container-type: size; overflow: hidden;
     transition: transform var(--t-1), box-shadow var(--t-1), opacity var(--t-1);
   }
   .chip:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
@@ -117,17 +118,24 @@
   .chip.dragging, .tchip.dragging { opacity: .3; }
   body.is-dragging .chip { pointer-events: none; }
   .chip.absent { background: transparent; border-style: dashed; color: GrayText; box-shadow: none; }
-  .chip .nm { font-size: var(--f-sm); font-weight: 600; overflow-wrap: anywhere; }
+  .chip .ic { width: clamp(24px, min(34cqh, 40cqw), 64px); height: clamp(24px, min(34cqh, 40cqw), 64px); object-fit: contain; flex: none; filter: drop-shadow(0 1px 2px rgb(0 0 0 / .25)); pointer-events: none; }
+  .chip .ic.fallback { display: grid; place-items: center; border-radius: 22%; background: var(--accent-soft); color: AccentColor; font-weight: 700; font-size: clamp(14px, min(18cqh, 22cqw), 32px); filter: none; }
+  .chip.absent .ic { filter: grayscale(1); opacity: .45; }
+  .chip .nm { font-size: clamp(13px, 10cqh, 20px); font-weight: 600; line-height: 1.2; max-width: 100%; overflow: hidden; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .chip .win { font-size: var(--f-sm); color: GrayText; line-height: 1.2; }
+  @container (max-height: 90px) { .chip .kb { display: none; } }
   .chip .kb { font-size: var(--f-xs); font-family: ui-monospace, "SF Mono", monospace; color: GrayText; }
   .chip:focus-visible, .tchip:focus-visible, .slot:focus-visible { outline: 2px solid AccentColor; outline-offset: 2px; }
   .chip .x {
     position: absolute; top: var(--sp-1); right: var(--sp-1); width: 20px; height: 20px;
-    padding: 0; border: 0; background: transparent; box-shadow: none; line-height: 1;
-    display: grid; place-items: center; border-radius: 50%;
-    color: GrayText; font-size: var(--f-xs); cursor: pointer; opacity: .55;
-    transition: opacity var(--t-1), background var(--t-1), color var(--t-1);
+    padding: 0; border: 0; box-shadow: none; line-height: 1;
+    display: grid; place-items: center; border-radius: 50%; cursor: pointer; opacity: 1;
+    background: color-mix(in srgb, CanvasText 10%, transparent);
+    color: color-mix(in srgb, CanvasText 70%, transparent);
+    transition: background var(--t-1), color var(--t-1);
   }
-  .chip .x:hover, .chip .x:focus-visible { opacity: 1; background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+  .chip .x svg { width: 10px; height: 10px; display: block; }
+  .chip .x:hover, .chip .x:focus-visible { background: var(--danger); color: #fff; }
   .chip:has(.sp) { padding-bottom: calc(var(--sp-1) + 26px); }
   .chip .sp {
     position: absolute; bottom: var(--sp-1); width: 24px; height: 24px;
@@ -143,8 +151,6 @@
   .chip .sp:hover, .chip .sp:focus-visible { opacity: 1; background: color-mix(in srgb, AccentColor 14%, ButtonFace); color: AccentColor; border-color: AccentColor; }
 
   #tray { background: Canvas; border-top: 1px solid var(--hair); padding: var(--sp-3) var(--sp-4); max-height: 170px; overflow-y: auto; scrollbar-width: thin; }
-  #tray input { width: 100%; border: 1px solid var(--hair); border-radius: var(--r-sm); padding: 5px 9px; font-size: var(--f-sm); margin-bottom: var(--sp-2); background: Field; color: FieldText; }
-  #tray input:focus { outline: none; border-color: AccentColor; box-shadow: 0 0 0 3px var(--accent-mid); }
   #chips { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
   .tchip {
     display: inline-flex; align-items: center; gap: 6px; border-radius: var(--r-sm);
@@ -152,8 +158,9 @@
     background: Field; color: FieldText; border: 1px solid var(--hair); box-shadow: var(--shadow-sm);
     transition: transform var(--t-1), box-shadow var(--t-1);
   }
-  .tchip::before { content: "⠿"; color: GrayText; font-size: var(--f-xxs); line-height: 1; }
+  .tchip .ic { width: 16px; height: 16px; object-fit: contain; flex: none; pointer-events: none; }
   .tchip:hover { transform: translateY(-1px); box-shadow: 0 3px 8px rgb(0 0 0 / .12); }
+  .tchip.min { opacity: .55; }
   .tchip.placed { background: transparent; border-style: dashed; color: GrayText; }
   #chips .empty { font-size: var(--f-xs); color: GrayText; padding: 5px 0; }
 </style>
@@ -193,7 +200,6 @@
   </div>
   <div id="monitors"></div>
   <div id="tray">
-    <input id="filter" placeholder="Filtrar apps…" />
     <div id="chips"></div>
   </div>
 <script>
@@ -467,10 +473,25 @@ function render() {
         chip.setAttribute("aria-label", label + " — Supr para quitar");
         const n = flatIndex(s.name, j + 1);
         const x = document.createElement("button");
-        x.className = "x"; x.title = "Quitar"; x.setAttribute("aria-label", "Quitar"); x.textContent = "✕";
+        x.className = "x"; x.title = "Quitar"; x.setAttribute("aria-label", "Quitar"); x.innerHTML = '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
         const nmEl = document.createElement("span");
-        nmEl.className = "nm"; nmEl.textContent = label;
-        chip.append(x, nmEl);
+        const baseName = app.replace(/#(\d+)$/, "");
+        const winM = /#(\d+)$/.exec(app);
+        const ic = document.createElement("img");
+        ic.className = "ic"; ic.alt = ""; ic.draggable = false; ic.src = iconURL(app);
+        ic.onerror = () => {
+          const fb = document.createElement("span");
+          fb.className = "ic fallback"; fb.setAttribute("aria-hidden", "true");
+          fb.textContent = (stripFmt(baseName).charAt(0) || "?").toUpperCase();
+          ic.replaceWith(fb);
+        };
+        nmEl.className = "nm"; nmEl.textContent = baseName;
+        chip.append(x, ic, nmEl);
+        if (winM) {
+          const win = document.createElement("span");
+          win.className = "win"; win.textContent = "ventana " + winM[1];
+          chip.appendChild(win);
+        }
         if (n <= 9) {
           const kb = document.createElement("span");
           kb.className = "kb"; kb.textContent = "⌘⌥" + n;
@@ -540,7 +561,9 @@ function render() {
         if (p.tray) {
           clearSpan(tgt, j);
           tgt.slots[j] = p.app;
+          persist(); // save before liveMove: the engine must know the new layout first
           post({ action: "liveMove", screen: s.name, idx: j + 1, app: p.app });
+          return;
         } else {
           const src = groups().get(p.screen);
           if (!src || !(p.idx >= 1 && p.idx <= src.slots.length)) { render(); return; }
@@ -549,10 +572,10 @@ function render() {
           const tmp = tgt.slots[j];
           tgt.slots[j] = src.slots[p.idx - 1];
           src.slots[p.idx - 1] = tmp;
+          persist(); // save before liveMove: the engine must know the new layout first
           if (tgt.slots[j]) post({ action: "liveMove", screen: s.name, idx: j + 1, app: tgt.slots[j] });
           if (src.slots[p.idx - 1]) post({ action: "liveMove", screen: p.screen, idx: p.idx, app: src.slots[p.idx - 1] });
         }
-        persist();
       };
       grid.appendChild(slot);
     });
@@ -688,17 +711,19 @@ function placeInFirstFree(spec) {
     for (let i = 0; i < m.slots.length; i++) {
       if (m.slots[i] === "") {
         m.slots[i] = spec;
-        post({ action: "liveMove", screen: s.name, idx: i + 1, app: spec });
         persist();
+        post({ action: "liveMove", screen: s.name, idx: i + 1, app: spec });
         return;
       }
     }
   }
 }
 
+function stripFmt(t) { return t.replace(/[\u200e\u200f\u200b-\u200d\u2060\ufeff]/g, "").trim(); }
+
+function iconURL(name) { return "trisplit-icon://app/" + encodeURIComponent(name.replace(/#\d+$/, "")); }
+
 function renderChips() {
-  const qRaw = (document.getElementById("filter").value || "").trim();
-  const q = qRaw.toLowerCase();
   const used = new Set();
   for (const m of groups().values())
     for (const a of m.slots) if (a && a !== SPAN) used.add(specKey(a));
@@ -706,7 +731,6 @@ function renderChips() {
   box.replaceChildren();
   let shown = 0;
   for (const app of S.apps) {
-    if (q && !app.name.toLowerCase().includes(q)) continue;
     const n = app.count || 1;
     for (let i = 1; i <= n; i++) {
       const spec = i > 1 ? app.name + "#" + i : app.name;
@@ -717,13 +741,18 @@ function renderChips() {
         const t = ((app.titles && app.titles[i - 1]) || "").slice(0, 22);
         label = app.name + " · ventana " + i + (t ? " — " + t : "");
       }
-      c.textContent = label;
+      const tic = document.createElement("img");
+      tic.className = "ic"; tic.alt = ""; tic.draggable = false;
+      tic.src = iconURL(app.name);
+      tic.onerror = () => { tic.style.display = "none"; };
+      c.append(tic, document.createTextNode(label));
       c.draggable = true;
       c.tabIndex = 0;
       c.setAttribute("role", "button");
       c.setAttribute("aria-label", label + " — Intro para colocar en el primer hueco libre");
       shown++;
       if (used.has(specKey(spec))) c.classList.add("placed");
+      if (app.minimized && app.minimized[i - 1]) { c.classList.add("min"); c.title = "Minimizada"; }
       c.ondragstart = (e) => {
         e.dataTransfer.setData("text/plain", JSON.stringify({ app: spec, tray: true }));
         e.dataTransfer.effectAllowed = "copy";
@@ -747,12 +776,11 @@ function renderChips() {
   if (!shown) {
     const e = document.createElement("div");
     e.className = "empty";
-    e.textContent = q ? 'Sin resultados para "' + qRaw + '"' : "No hay apps con ventanas visibles";
+    e.textContent = "No hay apps con ventanas visibles";
     box.appendChild(e);
   }
 }
 
-document.getElementById("filter").oninput = renderChips;
 document.getElementById("cfg").onchange = (e) => { S.active = +e.target.value + 1; W = null; post({ action: "save", configs: S.configs, active: S.active }); render(); };
 const newBtn = document.getElementById("new");
 const newName = document.getElementById("newname");

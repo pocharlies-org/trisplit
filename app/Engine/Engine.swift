@@ -129,7 +129,7 @@ final class Engine: @unchecked Sendable {
             return true
         }
         var pid = app.processIdentifier
-        var win = pickWindow(visibleWindows(pid: pid), idx: idx)
+        var win = pickWindow(slotWindows(pid: pid), idx: idx)
         if win == nil {
             app.activate(options: [])
             win = findWindow(pid: pid)
@@ -191,7 +191,7 @@ final class Engine: @unchecked Sendable {
             let resolved: [(win: AXWindow?, exact: Bool)] = jobs.map { job in
                 let (name, idx) = parseSpec(job.0)
                 guard let app = runningApp(namesFor(name)) else { return (nil, false) }
-                let wins = visibleWindows(pid: app.processIdentifier)
+                let wins = slotWindows(pid: app.processIdentifier)
                 return (pickWindow(wins, idx: idx), idx <= wins.count)
             }
             let winners = slotWinners(resolved.map { (id: Int($0.win?.id ?? 0), exact: $0.exact) })
@@ -244,7 +244,7 @@ final class Engine: @unchecked Sendable {
             self.placeWindowLogged(w, frame)
             focusWindow(w)
             let name = NSRunningApplication(processIdentifier: w.pid)?.localizedName ?? ""
-            let wins = visibleWindows(pid: w.pid)
+            let wins = slotWindows(pid: w.pid)
             let idx = (wins.firstIndex { $0.id != 0 && $0.id == w.id } ?? 0) + 1
             return name.isEmpty ? nil : (name, idx)
         }, then: { [self] r in
@@ -268,7 +268,8 @@ final class Engine: @unchecked Sendable {
         let (name, idx) = parseSpec(slots[n - 1].app)
         let names = namesFor(name)
         onAX({
-            if let a = runningApp(names), let w = pickWindow(visibleWindows(pid: a.processIdentifier), idx: idx) {
+            if let a = runningApp(names), let w = pickWindow(slotWindows(pid: a.processIdentifier), idx: idx) {
+                if w.isMinimized { AX.setBool(w.el, kAXMinimizedAttribute, false) }
                 focusWindow(w)
             } else {
                 launchOrFocus(names[0])
@@ -310,7 +311,7 @@ final class Engine: @unchecked Sendable {
         for spec in otherSlots {
             let (name, idx) = parseSpec(spec)
             guard let a = runningApp(namesFor(name)),
-                  let w = pickWindow(visibleWindows(pid: a.processIdentifier), idx: idx), w.id != 0 else { continue }
+                  let w = pickWindow(slotWindows(pid: a.processIdentifier), idx: idx), w.id != 0 else { continue }
             keep.insert(w.id)
         }
         var wins: [CGWindowID: AXWindow] = [:]

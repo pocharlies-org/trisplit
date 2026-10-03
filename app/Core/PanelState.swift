@@ -10,6 +10,7 @@ struct PanelApp: Encodable, Equatable {
     var name: String
     var count: Int
     var titles: [String]
+    var minimized: [Bool] = []
 }
 
 struct PanelState: Encodable {

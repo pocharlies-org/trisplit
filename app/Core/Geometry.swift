@@ -114,3 +114,11 @@ func floorInt(_ d: Double) -> Int? {
     guard d.isFinite, abs(d) < 1e15 else { return nil }
     return Int(d.rounded(.down))
 }
+
+/// Order of window ids as slot indexes: ascending id, ties keep input order (stable). Returns input indices.
+/// Minimized windows must be part of `ids`, otherwise minimizing renumbers `App#N`.
+func slotOrder(ids: [UInt32]) -> [Int] {
+    ids.enumerated()
+        .sorted { $0.element != $1.element ? $0.element < $1.element : $0.offset < $1.offset }
+        .map { $0.offset }
+}

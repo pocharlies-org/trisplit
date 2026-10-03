@@ -268,6 +268,15 @@ func matchTests() {
         eq(bestMatch(names: ["Nope"], candidates: cands), nil)
         eq(normalizedAppName(" \u{200E}WhatsApp "), "whatsapp")
     }
+    test("slotOrder: App#N stable when a window is minimized") {
+        // ids in AX order; minimized windows stay in the list, so indexes never renumber
+        eq(slotOrder(ids: [133407, 106732]), [1, 0])
+        let ids: [UInt32] = [133407, 106732]
+        let order = slotOrder(ids: ids)
+        eq(pickWindow(order.map { ids[$0] }, idx: 1), 106732, "Code = lowest id")
+        eq(pickWindow(order.map { ids[$0] }, idx: 2), 133407, "Code#2 = next id")
+        eq(slotOrder(ids: [5, 5, 3]), [2, 0, 1], "ties keep input order")
+    }
     test("sortApps") {
         let apps = ["slack", "Code", "Arc", "code"].map { PanelApp(name: $0, count: 1, titles: []) }
         eq(sortApps(apps).map(\.name), ["Arc", "Code", "code", "slack"])

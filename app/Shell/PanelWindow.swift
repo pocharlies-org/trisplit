@@ -43,6 +43,7 @@ final class PanelController: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         w.minSize = NSSize(width: 820, height: 520)
         let cfg = WKWebViewConfiguration()
         cfg.userContentController.add(WeakScriptHandler(self), name: PanelController.handlerName)
+        cfg.setURLSchemeHandler(AppIconSchemeHandler(), forURLScheme: "trisplit-icon")
         let wv = WKWebView(frame: w.contentLayoutRect, configuration: cfg)
         wv.autoresizingMask = [.width, .height]
         wv.navigationDelegate = self
