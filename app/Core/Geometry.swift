@@ -122,3 +122,15 @@ func slotOrder(ids: [UInt32]) -> [Int] {
         .sorted { $0.element != $1.element ? $0.element < $1.element : $0.offset < $1.offset }
         .map { $0.offset }
 }
+
+/// Order in which applyConfig raises the windows it placed: slot order, except that the window
+/// that ends up focused is raised LAST so it is on top. The focus is the window focused before
+/// the apply when it is one of the placed windows, otherwise the first slot's window.
+/// Returns the raise order (last element = final focus); empty when nothing was placed.
+func raiseOrder(placed: [UInt32], previouslyFocused: UInt32?) -> [UInt32] {
+    var seen = Set<UInt32>()
+    let uniq = placed.filter { $0 != 0 && seen.insert($0).inserted }
+    guard let first = uniq.first else { return [] }
+    let focus = (previouslyFocused.flatMap { uniq.contains($0) ? $0 : nil }) ?? first
+    return uniq.filter { $0 != focus } + [focus]
+}

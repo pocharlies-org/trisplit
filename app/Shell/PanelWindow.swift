@@ -75,6 +75,13 @@ final class PanelController: NSObject, WKScriptMessageHandler, WKNavigationDeleg
 
     func hide() { window?.orderOut(nil) }
 
+    /// After applying with the panel open: keep it in front and focused.
+    func bringToFront() {
+        guard let w = window, w.isVisible else { return }
+        NSApp.activate(ignoringOtherApps: true)
+        w.makeKeyAndOrderFront(nil)
+    }
+
     func evaluate(_ js: String) {
         guard pageReady else { pendingScript = js; return }
         webView?.evaluateJavaScript(js) { [weak self] _, err in
