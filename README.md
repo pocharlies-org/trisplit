@@ -57,6 +57,17 @@ slots, then press **Apply**.
 Slots are numbered across monitors from left to right (by screen position). `App#N` (for example
 `Code#2`) addresses the Nth window of an app, minimized windows included.
 
+### Profiles
+
+Profiles (named configurations) are the tabs at the top of the panel.
+
+- **Switch:** click a tab, or use ←/→ to move between tabs and Enter or Space to activate.
+- **Rename:** double-click a tab, press F2 (or Enter on the active tab), or use the `⋯` menu. Enter or clicking away saves, Esc cancels. Empty and duplicate names are rejected.
+- **Duplicate:** `⋯` → Duplicar copies the active profile (slots and spans included) as "<name> copia" and lets you rename it right away.
+- **Reorder:** drag a tab, or press ⌥← / ⌥→ on a focused tab. The active profile stays active. `⌘⌥⇧0` cycles in tab order.
+- **Delete:** `⋯` → Eliminar (click twice to confirm). The last profile cannot be deleted.
+- **New:** the `+` button creates an empty profile; type its name and press Enter.
+
 ## Slots spanning several columns
 
 An app can take several adjacent columns of the same row. In the panel each occupied slot

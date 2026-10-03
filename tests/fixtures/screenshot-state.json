@@ -66,6 +66,19 @@
           ]
         }
       }
+    },
+    {
+      "name": "Meeting",
+      "monitors": {
+        "Ultrawide": {
+          "cols": 2,
+          "rows": 1,
+          "slots": [
+            "Slack",
+            "Google Chrome"
+          ]
+        }
+      }
     }
   ],
   "active": 1,
