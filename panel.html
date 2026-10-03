@@ -160,6 +160,7 @@
   }
   .tchip .ic { width: 16px; height: 16px; object-fit: contain; flex: none; pointer-events: none; }
   .tchip:hover { transform: translateY(-1px); box-shadow: 0 3px 8px rgb(0 0 0 / .12); }
+  .tchip.min { opacity: .55; }
   .tchip.placed { background: transparent; border-style: dashed; color: GrayText; }
   #chips .empty { font-size: var(--f-xs); color: GrayText; padding: 5px 0; }
 </style>
@@ -560,7 +561,9 @@ function render() {
         if (p.tray) {
           clearSpan(tgt, j);
           tgt.slots[j] = p.app;
+          persist(); // save before liveMove: the engine must know the new layout first
           post({ action: "liveMove", screen: s.name, idx: j + 1, app: p.app });
+          return;
         } else {
           const src = groups().get(p.screen);
           if (!src || !(p.idx >= 1 && p.idx <= src.slots.length)) { render(); return; }
@@ -569,10 +572,10 @@ function render() {
           const tmp = tgt.slots[j];
           tgt.slots[j] = src.slots[p.idx - 1];
           src.slots[p.idx - 1] = tmp;
+          persist(); // save before liveMove: the engine must know the new layout first
           if (tgt.slots[j]) post({ action: "liveMove", screen: s.name, idx: j + 1, app: tgt.slots[j] });
           if (src.slots[p.idx - 1]) post({ action: "liveMove", screen: p.screen, idx: p.idx, app: src.slots[p.idx - 1] });
         }
-        persist();
       };
       grid.appendChild(slot);
     });
@@ -708,8 +711,8 @@ function placeInFirstFree(spec) {
     for (let i = 0; i < m.slots.length; i++) {
       if (m.slots[i] === "") {
         m.slots[i] = spec;
-        post({ action: "liveMove", screen: s.name, idx: i + 1, app: spec });
         persist();
+        post({ action: "liveMove", screen: s.name, idx: i + 1, app: spec });
         return;
       }
     }
@@ -749,6 +752,7 @@ function renderChips() {
       c.setAttribute("aria-label", label + " — Intro para colocar en el primer hueco libre");
       shown++;
       if (used.has(specKey(spec))) c.classList.add("placed");
+      if (app.minimized && app.minimized[i - 1]) { c.classList.add("min"); c.title = "Minimizada"; }
       c.ondragstart = (e) => {
         e.dataTransfer.setData("text/plain", JSON.stringify({ app: spec, tray: true }));
         e.dataTransfer.effectAllowed = "copy";

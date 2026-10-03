@@ -119,6 +119,13 @@ func visibleWindows(pid: pid_t) -> [AXWindow] {
         .map { $0.element }
 }
 
+/// Windows that own an `App#N` slot: standard, INCLUDING minimized, sorted by window id.
+/// Minimizing a window must not renumber the others.
+func slotWindows(pid: pid_t) -> [AXWindow] {
+    let ws = axWindows(pid: pid).filter { $0.isStandard }
+    return slotOrder(ids: ws.map { $0.id }).map { ws[$0] }
+}
+
 /// Lua anyWindow(): first standard or minimized window.
 func anyWindow(pid: pid_t) -> AXWindow? {
     axWindows(pid: pid).first { $0.isStandard || $0.isMinimized }

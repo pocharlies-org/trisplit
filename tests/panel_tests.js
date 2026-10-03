@@ -136,6 +136,27 @@
     eq(byAction("save").length, 1, "save count");
   });
 
+  test("save precedes liveMove for swap, span grow and tray drop", () => {
+    const firstIdx = (a) => log.findIndex((m) => m.action === a);
+    fresh();
+    drop(slotOf(ODY, 1), { app: "Code#2", screen: "LC49G95T", idx: 1 });
+    assert(firstIdx("save") >= 0 && firstIdx("save") < firstIdx("liveMove"), "swap: save before liveMove");
+    fresh();
+    slotOf("LC49G95T", 1).querySelector(".sp.grow").onclick({ stopPropagation() {} });
+    assert(firstIdx("save") >= 0 && firstIdx("save") < firstIdx("liveMove"), "span: save before liveMove");
+    fresh();
+    drop(slotOf(ODY, 2), { app: "Slack", tray: true });
+    assert(firstIdx("save") >= 0 && firstIdx("save") < firstIdx("liveMove"), "tray drop: save before liveMove");
+  });
+
+  test("minimized window chip is dimmed in the tray", () => {
+    fresh((s) => { s.apps[0].minimized = [false, true]; });
+    const c = tchips().filter((x) => x.textContent.startsWith("Code · ventana"));
+    eq(c[0].classList.contains("min"), false, "window 1 normal");
+    eq(c[1].classList.contains("min"), true, "window 2 dimmed");
+    eq(c[1].title, "Minimizada", "title");
+  });
+
   test("placed flag is keyed by full spec (Code vs Code#2, App == App#1)", () => {
     fresh((s) => { s.configs[0].monitors[ODY].slots = ["Safari#1", ""]; });
     const flag = (label) => tchips().find((c) => c.textContent.startsWith(label)).classList.contains("placed");
